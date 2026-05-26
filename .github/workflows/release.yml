@@ -14,8 +14,10 @@
 #   - Tag'in pom.xml versiyonu ile eşleştiğini doğrular (drift koruması).
 #   - JDK 8 ile build (CI / runtime ile birebir).
 #   - SBOM üretir (`-P sbom` profile; OWASP koşmadan hızlı).
-#   - DRAFT release açar; release notes otomatik generate'lenir
-#     (CHANGELOG `[X.Y.Z]` bölümüne manuel düzenleme yapmak için draft).
+#   - PUBLIC release açar; release notes otomatik generate'lenir + CHANGELOG
+#     `[X.Y.Z]` bölümü body'ye eklenir. Stable tag'ler `make_latest=true`
+#     ile "Latest" rozeti alır; `-rc`, `-beta` gibi suffix'liler otomatik
+#     pre-release olarak işaretlenir.
 #
 # Native installer'lar (jpackage MSI / PKG / DEB / RPM) bu workflow'da YOK.
 # Sebep: jpackage modular runtime (JDK 9+) bundle etmeyi gerektirir; bu
@@ -196,7 +198,8 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
-          draft: true
+          draft: false
+          make_latest: ${{ !contains(steps.tag.outputs.tag, '-') }}
           prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
           generate_release_notes: true
           body_path: ${{ steps.notes.outputs.notes-file }}
