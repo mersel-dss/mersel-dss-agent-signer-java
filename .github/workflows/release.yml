@@ -1,0 +1,192 @@
+#
+# Release — `vX.Y.Z` tag push'unda tetiklenir.
+#
+# Üretilen asset'ler (her release'e attach edilir):
+#   1. mersel-dss-agent-signer-api-X.Y.Z.jar      — executable fat-jar
+#      (application.yml içindeki MERSEL_AGENT_UPDATE_ASSET_PATTERN ile
+#      uyumlu; otomatik güncelleme alt sistemi bu pattern'i bekler)
+#   2. mersel-dss-agent-signer-api-X.Y.Z-bom.xml  — CycloneDX SBOM (XML)
+#   3. mersel-dss-agent-signer-api-X.Y.Z-bom.json — CycloneDX SBOM (JSON)
+#   4. SHA256SUMS.txt                              — yukarıdakilerin
+#      sha256 checksums'ı; integrity verification için.
+#
+# Workflow tek seferde:
+#   - Tag'in pom.xml versiyonu ile eşleştiğini doğrular (drift koruması).
+#   - JDK 8 ile build (CI / runtime ile birebir).
+#   - SBOM üretir (`-P sbom` profile; OWASP koşmadan hızlı).
+#   - DRAFT release açar; release notes otomatik generate'lenir
+#     (CHANGELOG `[X.Y.Z]` bölümüne manuel düzenleme yapmak için draft).
+#
+# Native installer'lar (jpackage MSI / PKG / DEB / RPM) bu workflow'da YOK.
+# Sebep: jpackage modular runtime (JDK 9+) bundle etmeyi gerektirir; bu
+# repo runtime için JDK 1.8 zorunlu (PKCS#11 reflection erişimi için).
+# Native installer'lar JDK 17 portu sırasında ayrı bir workflow ile gelecek
+# (roadmap'teki "JDK 17+ hattı" kalemine bağlı).
+#
+# Manuel tetikleme: workflow_dispatch ile mevcut bir tag'i (örn. `v3.0.0`)
+# tekrar release edebilirsin (önce mevcut release'i sil).
+#
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag adı (vX.Y.Z formatında). Var olan tag yeniden release edilir.'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Publish (JDK 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF##*/}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
+            echo "::error::Tag formatı vX.Y.Z[-suffix] olmalı: '$TAG'"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $TAG (version: $VERSION)"
+
+      - name: Checkout (tagged ref)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      - name: Verify pom.xml version matches tag
+        shell: bash
+        run: |
+          POM_VERSION=$(./mvnw --batch-mode --no-transfer-progress -q \
+            -Dexec.executable=echo \
+            -Dexec.args='${project.version}' \
+            --non-recursive exec:exec 2>/dev/null | tail -n 1)
+          if [ "$POM_VERSION" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "::error::pom.xml version ($POM_VERSION) tag ile uyuşmuyor (${{ steps.tag.outputs.version }}). Tag atmadan önce pom.xml'i bump'la."
+            exit 1
+          fi
+          echo "pom.xml version $POM_VERSION = tag — tamam."
+
+      - name: Verify Spotless formatting
+        run: ./mvnw --batch-mode --no-transfer-progress spotless:check
+
+      - name: Build & test
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+
+      - name: Generate CycloneDX SBOM
+        run: ./mvnw --batch-mode --no-transfer-progress -P sbom -DskipTests package
+
+      - name: Stage release assets
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.tag.outputs.version }}"
+          ARTIFACT_BASE="mersel-dss-agent-signer-api-${VERSION}"
+          mkdir -p release-assets
+
+          # 1) Versionlu fat-jar (UpdateService asset-name-pattern uyumu için).
+          cp "target/mersel-dss-agent-signer-api.jar" \
+             "release-assets/${ARTIFACT_BASE}.jar"
+
+          # 2) SBOM'lar.
+          cp target/bom.xml  "release-assets/${ARTIFACT_BASE}-bom.xml"
+          cp target/bom.json "release-assets/${ARTIFACT_BASE}-bom.json"
+
+          # 3) SHA-256 checksum dosyası (her release asset için).
+          cd release-assets
+          sha256sum "${ARTIFACT_BASE}.jar" \
+                    "${ARTIFACT_BASE}-bom.xml" \
+                    "${ARTIFACT_BASE}-bom.json" \
+                    > SHA256SUMS.txt
+          echo "asset-list:"
+          ls -la
+
+      - name: Extract CHANGELOG section for tag
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.tag.outputs.version }}"
+          NOTES_FILE="release-notes.md"
+
+          # CHANGELOG.md'den [X.Y.Z] bölümünü çıkar; sonraki ## başlığına kadar
+          # olan satırları al. Bölüm yoksa generic mesaj.
+          if grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { capture=1; next }
+              capture && /^## \[/ { exit }
+              capture { print }
+            ' CHANGELOG.md > "$NOTES_FILE"
+            echo "CHANGELOG section bulundu ve release notes'a yazıldı."
+          else
+            echo "## Sürüm $VERSION" > "$NOTES_FILE"
+            echo "" >> "$NOTES_FILE"
+            echo "CHANGELOG.md'de \`[$VERSION]\` bölümü bulunamadı; otomatik generate edilen notları kullan." >> "$NOTES_FILE"
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "### Asset doğrulama"
+            echo ""
+            echo "Her asset'in SHA-256 checksum'ı \`SHA256SUMS.txt\` dosyasında ve aşağıda raporlanmıştır:"
+            echo ""
+            echo '```'
+            cat release-assets/SHA256SUMS.txt
+            echo '```'
+            echo ""
+            echo "### CycloneDX SBOM"
+            echo ""
+            echo "Schema v1.6, XML + JSON formatlarında. Downstream güvenlik tarayıcıları"
+            echo "(\`grype sbom:./bom.json\`, \`syft\`, OWASP Dependency-Track) doğrudan tüketebilir."
+          } >> "$NOTES_FILE"
+
+          echo "notes-file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          draft: true
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
+          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.notes-file }}
+          files: |
+            release-assets/mersel-dss-agent-signer-api-*.jar
+            release-assets/mersel-dss-agent-signer-api-*-bom.xml
+            release-assets/mersel-dss-agent-signer-api-*-bom.json
+            release-assets/SHA256SUMS.txt
+          fail_on_unmatched_files: true

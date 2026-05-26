@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Güvenlik açığı bildirimi
+    url: https://github.com/mersel-dss/mersel-dss-agent-signer-java/security/advisories/new
+    about: Lütfen güvenlik açıklarını public issue olarak değil, security advisory üzerinden bildirin.
+  - name: Davranış kuralları ihlali
+    url: mailto:conduct@mersel.cloud
+    about: Topluluk davranış kurallarının ihlali için.

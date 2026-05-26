@@ -1,0 +1,40 @@
+# --- Build artefacts ---
+target/
+*.class
+*.jar
+
+# --- IDE & editor ---
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*.bak
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Logs / runtime ---
+logs/
+*.log
+nohup.out
+
+# --- Local secrets / overrides ---
+# Geliştirici override'larını commit etmeyin; örnek için
+# application-local.yml.example varsa onu commit edin.
+application-local.yml
+application-local.yaml
+application-local.properties
+.env
+.env.*
+!.env.example
+
+# --- Test outputs ---
+*.test-output
+hs_err_pid*.log
+
+# --- Maven Wrapper download dizini opsiyoneldir ---
+.mvn/wrapper/maven-wrapper.jar

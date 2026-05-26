@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!--
+        PIN/PAN maskeleyen özel converter. `%msg` yerine `%mskmsg` ile
+        kullanılır. Asıl savunma her zaman PIN'i log mesajına KOYMAMAKTIR;
+        bu converter ek bir savunma katmanıdır.
+    -->
+    <conversionRule conversionWord="mskmsg"
+                    converterClass="io.mersel.dss.agent.api.util.SensitiveMaskingConverter"/>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <property name="LOG_PATTERN"
+              value="%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}} ${LOG_LEVEL_PATTERN:-%5p} [${PID:- }] [%15.15t] %-40.40logger{39} : %mskmsg%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <logger name="io.mersel" level="INFO"/>
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.apache.coyote" level="WARN"/>
+    <logger name="org.apache.tomcat" level="WARN"/>
+    <logger name="org.apache.catalina" level="INFO"/>
+    <logger name="okhttp3" level="WARN"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+    Mersel DSS Agent Signer — API reference UI.
+
+    Scalar (https://scalar.com) modern, hızlı ve okunaklı bir alternatif olarak
+    Swagger UI yerine kullanılmıştır. OpenAPI 3 spec'i Spring Boot daemon'un
+    `/v3/api-docs` endpoint'inden anlık çekilir; bundle CDN yerine yerel
+    `vendor/scalar/standalone.js` üzerinden yüklenir (offline çalışır).
+-->
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mersel DSS Agent Signer — API Reference</title>
+    <link
+      rel="icon"
+      type="image/png"
+      href="/assets/icon.png" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0b0e14;
+        color: #e6e6e6;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #api-reference[hidden] {
+        display: none;
+      }
+      #bootstrap-error {
+        display: none;
+        max-width: 720px;
+        margin: 8vh auto;
+        padding: 32px;
+        background: #11151c;
+        border: 1px solid #2a2f3a;
+        border-radius: 12px;
+        line-height: 1.55;
+      }
+      #bootstrap-error h1 {
+        margin-top: 0;
+        font-size: 20px;
+      }
+      #bootstrap-error code {
+        background: #1e2330;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #ffb86b;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+        Scalar bootstrap. `data-url` daemon'un OpenAPI JSON endpoint'ine işaret
+        eder; `data-configuration` ile tema/başlık özelleştirilir.
+    -->
+    <script
+      id="api-reference"
+      data-url="/v3/api-docs"
+      data-configuration='{"theme":"deepSpace","layout":"modern","hideDownloadButton":false,"defaultOpenAllTags":false,"metaData":{"title":"Mersel DSS Agent Signer — API Reference"}}'></script>
+    <script src="/vendor/scalar/standalone.js"></script>
+
+    <noscript>
+      <div id="bootstrap-error" style="display:block">
+        <h1>JavaScript gereklidir</h1>
+        <p>
+          Bu sayfa modern bir API reference (Scalar) ile OpenAPI dökümanını
+          görüntülemek için JavaScript kullanır. Tarayıcı ayarlarınızdan
+          JavaScript'i etkinleştirin ya da ham spec'e
+          <a href="/v3/api-docs" style="color:#7ab7ff">/v3/api-docs</a>
+          adresinden ulaşın.
+        </p>
+      </div>
+    </noscript>
+  </body>
+</html>

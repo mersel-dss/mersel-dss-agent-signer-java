@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Akıllı kart - PKCS#11 kütüphane eşleştirmeleri.
+
+    Element semantiği:
+      <lib>           - tek mimari için çıplak kütüphane adı (uzantısız, lib öneksiz)
+      <lib32>/<lib64> - 32/64 bit ayrımı varsa
+      <lib-alt>       - aynı kart için case farklı veya vendor varyant ad
+                        (Linux case-sensitive olduğu için kritik)
+      <atr>           - bilinen ATR (HEX, boşluksuz, büyük harf) — Layer 1 exact match
+      <atr-pattern>   - ATR'in historical-bytes hex'ine uygulanacak Java regex
+                        (Layer 2 — yeni sürüm varyantları için vendor parmak izi).
+                        TÜBİTAK ma3api orijinal mantığıyla aynı: matcher.matches()
+                        anchored eşleşme. regex="..." attribute veya body içinde.
+      <hint os="..."> - tipik kurulum dizini (windows | macos | linux)
+
+    Dosya adı türetimi (Pkcs11LibraryResolver):
+      lib="akisp11" girildiğinde resolver şunları arar:
+        Windows: akisp11.dll
+        macOS:   libakisp11.dylib, akisp11.dylib, libakisp11.so
+        Linux:   libakisp11.so, akisp11.so, libakisp11.so.1..3
+-->
+<smartcard-config>
+
+    <!-- ====================== TÜBİTAK AKIS ======================
+         AKİS nitelikli elektronik sertifika kartları (NES, e-imza).
+         Türkiye'de en yaygın e-imza kartı; ATR ile tanınabilir. -->
+    <card-type name="AKIS">
+        <lib>akisp11</lib>
+
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Windows\syswow64</hint>
+        <hint os="windows">C:\Program Files\AKIS\bin</hint>
+        <hint os="windows">C:\Program Files (x86)\AKIS\bin</hint>
+
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/lib64</hint>
+        <hint os="linux">/usr/lib/x86_64-linux-gnu</hint>
+        <hint os="linux">/usr/local/lib</hint>
+        <hint os="linux">/opt/akis</hint>
+        <hint os="linux">/opt/akis/lib</hint>
+
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="macos">/Library/Akis</hint>
+        <hint os="macos">/Library/Application Support/AKIS</hint>
+        <hint os="macos">/Applications/AKIS.app/Contents/MacOS</hint>
+        <hint os="macos">/opt/homebrew/lib</hint>
+
+        <!-- Layer 1 — exact ATR match -->
+        <atr>3BBA11008131FE4D55454B41452056312E30AE</atr>
+        <atr>3B9F968131FE45806755454B41451112318073B3A180E9</atr>
+        <atr>3B9F968131FE45806755454B41451212318073B3A180EA</atr>
+        <atr>3B9F968131FE45806755454B41451213318073B3A180EB</atr>
+        <atr>3B9F968131FE45806755454B41451252318073B3A180AA</atr>
+        <atr>3B9F968131FE45806755454B41451253318073B3A180AB</atr>
+        <atr>3B9F158131FE45806755454B41451221318073B3A1805A</atr>
+        <atr>3B9F968131FE45806755454B41451221318073B3A180D9</atr>
+        <atr>3B9F138131FE45806755454B41451221318073B3A1805C</atr>
+        <atr>3B9F138131FE45806755454B41451261318073B3A1801C</atr>
+        <atr>3B9F158131FE45806755454B41451261318073B3A1801A</atr>
+        <atr>3B9F968131FE45806755454B41451261318073B3A18099</atr>
+        <atr>3B9F968131FE458065544320201231C073F621808105B3</atr>
+        <atr>3B9F968131FE45806755454B41451292318073B3A1806A</atr>
+        <atr>3B9F968131FE45806755454B41451293318073B3A1806B</atr>
+        <atr>3B9F968131FE45806755454B41451312318073B3A180EB</atr>
+        <atr>3B9F968131FE45806755454B414512A4318073B3A1805C</atr>
+        <atr>3B9F968131FE45806755454B414512A5318073B3A1805D</atr>
+        <atr>3B9F978131FE458065544312210031C073F62180810593</atr>
+        <atr>3B9F978131FE4580655443D3230231C073F62180810552</atr>
+
+        <!-- TÜBİTAK ma3api AkisTemplate.ATR_HASHES extract'inden eklenen ek AKIS NES ATR'leri -->
+        <atr>3B9F978131FE458065544312210731C073F62180810594</atr>
+        <atr>3B9F978131FE458065544312210731C073F62180810595</atr>
+        <atr>3B9F978131FE4580655443D2210831C073F6218081015F</atr>
+        <atr>3B9F978131FE458065544312210831C073F6218081019F</atr>
+        <atr>3B9F978131FE4580655443D2210831C073F6218081055B</atr>
+        <atr>3B9F978131FE4580655443E4210831C073F6218081056D</atr>
+        <atr>3B9F968131FE4580655443D3210831C073F6218081055B</atr>
+        <atr>3B9F968131FE4580655443D2210831C073F6218081055A</atr>
+        <atr>3B9F978131FE458065544312210831C073F6218081059B</atr>
+        <atr>3B9F978131FE458065544353228231C073F62180810553</atr>
+
+        <!-- Layer 2 — historical-bytes regex match.
+             Sürüm bayt'ları dışında vendor parmak izi sabit olduğu için yeni AKIS
+             sürümleri Layer 1 listesini güncellemeden otomatik tanınır. -->
+
+        <!-- UEKAE ailesi (eski AKIS NES, 2011-2019): 80 67 [UEKAE] [ver] [318073B3A180] -->
+        <atr-pattern regex="806755454B4145....318073B3A180"/>
+
+        <!-- TC ailesi (yeni AKIS NES + T.C. Kimlik 2020+): 80 65 [TC] [ver] [31C073F6218081] [tail] -->
+        <atr-pattern regex="80655443......31C073F6218081.."/>
+    </card-type>
+
+    <!-- T.C. Kimlik Kartı (AKIS_KK) -->
+    <card-type name="AKIS_KK">
+        <lib>tckkp11</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\AKIS\bin</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="macos">/Library/Akis</hint>
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/local/lib</hint>
+        <hint os="linux">/opt/akis</hint>
+    </card-type>
+
+    <!-- ====================== SafeNet eToken / Aladdin ======================
+         SafeNet Authentication Client (SAC) — Thales (eski Gemalto/Aladdin).
+         Linux case-sensitive olduğu için lib varyantları lib-alt ile listeleniyor. -->
+    <card-type name="ALADDIN">
+        <lib>eTPKCS11</lib>
+        <lib-alt>etpkcs11</lib-alt>
+        <lib-alt>eToken</lib-alt>
+        <lib-alt>eTPkcs11</lib-alt>
+
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Windows\syswow64</hint>
+        <hint os="windows">C:\Program Files\SafeNet\Authentication\SAC\x64</hint>
+        <hint os="windows">C:\Program Files\SafeNet\Authentication\SAC\x32</hint>
+        <hint os="windows">C:\Program Files (x86)\SafeNet\Authentication\SAC\x32</hint>
+        <hint os="windows">C:\Program Files (x86)\SafeNet\Authentication\SAC\x64</hint>
+
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="macos">/Library/Frameworks/eToken.framework/Versions/A</hint>
+        <hint os="macos">/Applications/SafeNet/eToken</hint>
+
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/lib64</hint>
+        <hint os="linux">/usr/lib/x86_64-linux-gnu</hint>
+        <hint os="linux">/opt/eToken/lib</hint>
+
+        <atr>3BD5180081313A7D8073C8211030</atr>
+        <atr>3BD518008131FE7D8073C82110F4</atr>
+        <!-- SafeNet eToken 5110 GA -->
+        <atr>3B7F96000080318065B0846160FB120FFD829000</atr>
+    </card-type>
+
+    <!-- ====================== Kobil ======================
+         Kobil mIDentity / SecOVID token'lar. -->
+    <card-type name="KOBIL">
+        <lib>kpkcs11hash</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Program Files\KOBIL\midentity client</hint>
+        <hint os="windows">C:\Program Files (x86)\KOBIL\midentity client</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="macos">/Applications/Kobil</hint>
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/local/lib</hint>
+        <hint os="linux">/opt/kobil/lib</hint>
+    </card-type>
+
+    <!-- ====================== A-Trust / SafeSign / StarCOS ======================
+         A.E.T. Europe SafeSign — turkiye.gov.tr "StarCOS" adıyla yönetir,
+         aynı vendor lib'idir (aetpkss1). -->
+    <card-type name="SAFESIGN">
+        <lib>aetpkss1</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Windows\syswow64</hint>
+        <hint os="windows">C:\Program Files\A-Trust\acos</hint>
+        <hint os="windows">C:\Program Files\A.E.T. Europe B.V.\SafeSign\Win64</hint>
+        <hint os="windows">C:\Program Files (x86)\A.E.T. Europe B.V.\SafeSign\Win32</hint>
+
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="macos">/Applications/tokenadmin.app/Contents/Frameworks</hint>
+
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/lib/x86_64-linux-gnu</hint>
+        <hint os="linux">/usr/local/lib</hint>
+
+        <atr>3BBB1800C01031FE4580670412B00303000081053C</atr>
+        <atr>3BFA1800FF8131FE454A434F5032315632333165</atr>
+    </card-type>
+
+    <!-- ====================== TÜBİTAK ATIK ====================== -->
+    <card-type name="ATIKKG">
+        <lib>atikKg_jni</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\AKIS\bin</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/opt/akis</hint>
+    </card-type>
+
+    <card-type name="ATIKHSM">
+        <lib32>uhsmpkcs11</lib32>
+        <lib64>uhsmpkcs11x64</lib64>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\AKIS\bin</hint>
+        <hint os="windows">C:\Program Files (x86)\AKIS\bin</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/lib64</hint>
+        <hint os="linux">/opt/akis</hint>
+    </card-type>
+
+    <!-- ====================== CardOS / Atos ====================== -->
+    <card-type name="CARDOS">
+        <lib>cmp11</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\Atos\CardOS API</hint>
+        <hint os="windows">C:\Program Files (x86)\Atos\CardOS API</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/local/lib</hint>
+    </card-type>
+
+    <!-- ====================== ACS (Advanced Card Systems) ====================== -->
+    <card-type name="ACS">
+        <lib>acospkcs11</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\Advanced Card Systems Ltd</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="linux">/usr/lib</hint>
+    </card-type>
+
+    <!-- ====================== AEP Keyper HSM ====================== -->
+    <card-type name="AEPKEYPER">
+        <lib>bp201w32HSM</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\AEP</hint>
+    </card-type>
+
+    <!-- ====================== DataKey ====================== -->
+    <card-type name="DATAKEY">
+        <lib>dkck201</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <atr>3BFF1100008131FE4D8025A00000005657444B3333300600D0</atr>
+    </card-type>
+
+    <!-- ====================== Gemplus / GemSafe ====================== -->
+    <card-type name="GEMPLUS">
+        <lib>gclib</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Windows\syswow64</hint>
+        <atr>3B7D94000080318065B08301029083009000</atr>
+        <atr>3B6D000080318065B08301029083009000</atr>
+    </card-type>
+
+    <!-- ====================== Gemalto / Thales IDPrime ====================== -->
+    <card-type name="GEMALTO">
+        <lib32>idprimepkcs11</lib32>
+        <lib64>idprimepkcs1164</lib64>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Program Files\Gemalto\IDGo 800 PKCS#11</hint>
+        <hint os="windows">C:\Program Files (x86)\Gemalto\IDGo 800 PKCS#11</hint>
+
+        <hint os="macos">/Library/Gemalto/IDGo 800 PKCS11</hint>
+        <hint os="macos">/usr/local/lib</hint>
+
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/lib64</hint>
+        <hint os="linux">/usr/lib/x86_64-linux-gnu</hint>
+    </card-type>
+
+    <!-- ====================== KeyCorp ====================== -->
+    <card-type name="KEYCORP">
+        <lib>spmp1132</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <atr>3BB79400C03E31FE6553504B32339000AE</atr>
+    </card-type>
+
+    <!-- ====================== Net-ID (iID / SecMaker) ====================== -->
+    <card-type name="NETID">
+        <lib>iidp11</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="windows">C:\Program Files\Net iD</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="macos">/Library/Application Support/Net iD</hint>
+        <hint os="linux">/usr/lib</hint>
+    </card-type>
+
+    <!-- ====================== nCipher ====================== -->
+    <card-type name="NCIPHER">
+        <lib32>cknfast</lib32>
+        <lib64>cknfast-64</lib64>
+        <lib-alt>cknfast</lib-alt>
+        <hint os="windows">C:\Program Files\nCipher\nfast\bin</hint>
+        <hint os="linux">/opt/nfast/toolkits/pkcs11</hint>
+    </card-type>
+
+    <!-- ====================== SafeNet Luna (cryptoki) ====================== -->
+    <card-type name="SAFENET">
+        <lib>cryptoki</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Program Files\SafeNet\LunaClient</hint>
+        <hint os="linux">/usr/safenet/lunaclient/lib</hint>
+    </card-type>
+
+    <!-- ====================== Sefirot ====================== -->
+    <card-type name="SEFIROT">
+        <lib>pkcs11sfr</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+    </card-type>
+
+    <!-- ====================== T-Kart / Siemens CardOS ======================
+         T-Kart Siemens CardOS platformu üzerine kuruludur, aynı lib (siecap11)
+         hem T-Kart hem Siemens CardOS için. -->
+    <card-type name="TKART">
+        <lib>siecap11</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="windows">C:\Windows\SysWOW64</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="linux">/usr/lib</hint>
+        <atr>3BF2180002C10A31FE58C80874</atr>
+    </card-type>
+
+    <!-- ====================== Utimaco ====================== -->
+    <card-type name="UTIMACO">
+        <lib>cs2_pkcs11</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="linux">/usr/local/lib</hint>
+        <hint os="linux">/opt/utimaco/lib</hint>
+    </card-type>
+
+    <card-type name="UTIMACO_R2">
+        <lib>cs_pkcs11_R2</lib>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="linux">/usr/local/lib</hint>
+        <hint os="linux">/opt/utimaco/lib</hint>
+    </card-type>
+
+    <!-- ====================== DiRAK HSM (TÜBİTAK) ====================== -->
+    <card-type name="DIRAKHSM">
+        <lib32>dirakp11-32</lib32>
+        <lib64>dirakp11-64</lib64>
+        <hint os="windows">C:\Windows\System32</hint>
+        <hint os="linux">/usr/lib</hint>
+        <hint os="linux">/usr/local/lib</hint>
+    </card-type>
+
+    <!-- ====================== OpenDNSSEC SoftHSMv2 ====================== -->
+    <card-type name="OPENDNSSOFTHSM">
+        <lib32>softhsm2</lib32>
+        <lib64>softhsm2-x64</lib64>
+        <hint os="linux">/usr/lib/softhsm</hint>
+        <hint os="linux">/usr/local/lib/softhsm</hint>
+        <hint os="linux">/usr/lib/x86_64-linux-gnu/softhsm</hint>
+        <hint os="macos">/usr/local/lib/softhsm</hint>
+        <hint os="macos">/opt/homebrew/lib/softhsm</hint>
+        <hint os="macos">/usr/local/lib</hint>
+        <hint os="windows">C:\Program Files\SoftHSM2\lib</hint>
+        <hint os="windows">C:\Program Files (x86)\SoftHSM2\lib</hint>
+    </card-type>
+
+    <!-- ====================== Procenne HSM ====================== -->
+    <card-type name="PROCENNEHSM">
+        <lib>procryptoki</lib>
+        <hint os="windows">C:\Program Files\Procenne</hint>
+        <hint os="linux">/opt/procenne/lib</hint>
+        <hint os="linux">/usr/local/lib</hint>
+    </card-type>
+
+</smartcard-config>

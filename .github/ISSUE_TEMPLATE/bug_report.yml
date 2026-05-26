@@ -1,0 +1,95 @@
+name: Bug raporu
+description: Servis beklenen şekilde çalışmıyor, hatalı sonuç dönüyor veya patlıyor
+title: "[BUG] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sorunu raporladığın için teşekkürler. **Güvenlik açığı** ise lütfen
+        public issue açma; [SECURITY.md](../SECURITY.md) içindeki kanalları kullan.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Özet
+      description: Tek paragrafta sorun
+      placeholder: PAdES imzalı PDF Adobe Reader'da "geçersiz" görünüyor...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Yeniden üretim adımları
+      description: Hata için minimum gerekenler
+      value: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Beklenen davranış
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Gerçekleşen davranış
+      description: Stack trace varsa yapıştır (PIN/sertifika gibi hassas alanlar çıkarılmış olsun)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Sürüm / commit
+      description: pom.xml versiyonu veya git commit sha
+      placeholder: 3.0.0 / abc1234
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: İşletim sistemi
+      options:
+        - Windows 10/11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Linux (deb-based)
+        - Linux (rpm-based)
+        - Diğer
+    validations:
+      required: true
+
+  - type: input
+    id: jdk
+    attributes:
+      label: JDK sürümü
+      description: `java -version` çıktısı
+      placeholder: 1.8.0_392-temurin
+    validations:
+      required: true
+
+  - type: input
+    id: card
+    attributes:
+      label: Akıllı kart / token (varsa)
+      placeholder: AKIS, SafeNet eToken 5110+, SoftHSMv2, ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: İlgili log satırları
+      description: PIN/PAN içermediğinden emin ol
+      render: shell
+    validations:
+      required: false

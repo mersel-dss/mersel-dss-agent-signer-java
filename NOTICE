@@ -1,0 +1,110 @@
+Mersel DSS Agent Signer
+Copyright 2026 Mersel DSS
+
+Bu ürün, Mersel DSS (https://mersel.io) tarafından geliştirilmiştir.
+This product includes software developed by Mersel DSS
+(https://mersel.io).
+
+--------------------------------------------------------------------------------
+Lisans / License
+--------------------------------------------------------------------------------
+
+Bu yazılım, "Mersel Marka Atıf Eki" ile genişletilmiş Apache Lisansı
+sürüm 2.0 altında dağıtılmaktadır. Tam lisans metni için kök dizindeki
+LICENSE dosyasına bakınız. Marka kullanım politikası için TRADEMARK.md
+dosyasını inceleyiniz.
+
+This software is distributed under the Apache License, Version 2.0
+WITH the Mersel Brand Attribution Addendum. See the LICENSE file at the
+project root for the full text, and TRADEMARK.md for the trademark
+policy.
+
+--------------------------------------------------------------------------------
+Marka Atıfları — Korumalı Bildirimler / Brand Notices — Mandatory
+--------------------------------------------------------------------------------
+
+NEDEN KORUMALI? Yazılım, Türkiye e-İmza ekosistemine Mersel DSS
+tarafından açık kaynak olarak sunulmuş sistemik bir ortak iyi
+(commons) niteliğindedir. Permissive (Apache 2.0) lisans, isteyen
+herkesin ürünü serbestçe ticarileştirmesine, kapalı kaynağa
+gömmesine veya hizmet olarak sunmasına izin verir; karşılığında
+yalnızca üç küçük arayüz unsuru ile sınırlı bir görünürlük talep
+edilir. Bu denge, lisansın sözleşmesel karşılığını (consideration)
+oluşturur ve LICENSE Ek Önsöz'de ayrıntılandırılır.
+
+WHY MANDATORY? The Software is a systemic commons contributed by
+Mersel DSS to Türkiye's e-signature ecosystem as open source. The
+permissive Apache 2.0 base allows anyone to commercialize the
+Software, embed it in closed-source products, or offer it as a
+hosted service free of charge; in return the Licensor requests
+only a narrow visibility consideration limited to three small
+user-interface elements. This balance is the consideration of the
+license and is detailed in the Preamble of the Addendum in LICENSE.
+
+LICENSE dosyasındaki Ek'in 2. Maddesi uyarınca, Yazılım'ın
+çoğaltıldığı, dağıtıldığı, değiştirildiği veya başka herhangi
+bir biçimde kullanıldığı HER durumda aşağıdaki arayüz
+bileşenleri görünür, okunabilir ve işlevsel olarak eşdeğer
+biçimde KORUNMAK ZORUNDADIR. Bu yükümlülük; dahili kullanım,
+ticari satış, kapalı kaynaklı ürüne entegrasyon, barındırılmış
+hizmet (SaaS), her tür Türev Eser ve compound adlandırma
+("Mersel DSS Agent Signer — XYZ Edition" gibi) dahil tüm
+biçimlerde geçerlidir. Yeniden adlandırma yoluyla atıfları
+silme istisnası YOKTUR.
+
+Per Section 2 of the Addendum in the LICENSE file, the following
+in-product attribution elements MUST be preserved — visible,
+legible, and functionally equivalent — in EVERY reproduction,
+distribution, modification, or other use of the Software. This
+obligation applies to internal use, commercial sale, embedding
+inside a closed-source product, hosted (SaaS) service, all
+Derivative Works, and compound naming (e.g. "Mersel DSS Agent
+Signer — XYZ Edition") alike. There is no rebrand exception
+that would allow removing the Brand Notices.
+
+  (a) Açılış (splash) penceresindeki "MERSEL DSS" marka işareti,
+      marka aksanı ve "Agent Signer" başlığı.
+      / The "MERSEL DSS" brand mark, brand accent rule, and product
+      title in the application splash window.
+
+  (b) Ana pencerenin (MainWindow) üst kısmındaki Mersel banner / logo.
+      / The Mersel banner / logo lockup at the top of the main window.
+
+  (c) Ana pencerenin altbilgi (footer) satırı:
+      "Türkiye e-İmza süreçleri için mersel.io tarafından açık kaynak
+       olarak geliştirilmiştir."
+      ve https://mersel.io adresine giden etkin köprü.
+      / The footer credit line and the active hyperlink to
+      https://mersel.io.
+
+Bu bildirimlerin kaldırılması, gizlenmesi veya değiştirilmesi
+lisans sözleşmesinin esaslı ihlalini oluşturur. Yazılım'ı
+değiştirip dağıtan taraflar (forklar dahil) atıfları korumakla
+birlikte LICENSE Ek § 3 uyarınca Modifikasyon Bildirimi'ni de
+kullanıcı arayüzünde göstermekle ve § 4 uyarınca onay/sponsorluk
+imasından kaçınmakla yükümlüdür.
+
+Removing, hiding, or modifying these notices is a material breach
+of the license. Parties who modify and redistribute the Software
+(including forks) must, in addition to preserving the Brand
+Notices, display the Modification Disclosure in the user interface
+as required by Section 3 of the Addendum, and must avoid any
+implication of endorsement or sponsorship as required by Section 4.
+
+--------------------------------------------------------------------------------
+Üçüncü Taraf Bileşenler / Third-Party Components
+--------------------------------------------------------------------------------
+
+src/main/java/tr/com/cs/ altındaki kaynaklar ile pom.xml içinde
+bildirilen runtime bağımlılıkları (BouncyCastle, iText, xades4j,
+Apache Santuario, Spring Boot, SLF4J/Logback, Apache POI, Jakarta
+XML Binding, vb.) kendi orijinal lisansları altında dağıtılmaya
+devam eder. Her bileşenin kendi LICENSE/NOTICE dosyasına ve maven
+artifact metadata'sına bakınız.
+
+The sources under src/main/java/tr/com/cs/ and the runtime
+dependencies declared in pom.xml (BouncyCastle, iText, xades4j,
+Apache Santuario, Spring Boot, SLF4J/Logback, Apache POI, Jakarta
+XML Binding, etc.) remain under their respective original licenses.
+See each component's own LICENSE/NOTICE file and Maven artifact
+metadata.

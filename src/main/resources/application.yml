@@ -1,0 +1,227 @@
+#
+# Mersel DSS Agent Signer — yerel kullanıcı makinesinde çalışan
+# PKCS#11 akıllı kart imzalama uygulaması (tek jar, macOS / Linux /
+# Windows'ta çift tıkla çalışır).
+#
+# Uygulama HTTP üzerinden yayın yapar (loopback'e bağlanması beklenir).
+# Üretimde dışarıya açmak GEREKMEZ — tarayıcı uzantısı / yerel istemci
+# `http://localhost:${server.port}` adresine bağlanır.
+#
+
+server:
+  port: ${MERSEL_AGENT_PORT:15211}
+  address: ${MERSEL_AGENT_BIND:127.0.0.1}
+  connection-timeout: -1
+  servlet:
+    context-path: /
+  error:
+    include-message: always
+  tomcat:
+    max-swallow-size: 200MB
+    max-http-form-post-size: 200MB
+    max-http-post-size: 200MB
+
+spring:
+  application:
+    name: mersel-dss-agent-signer
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+  jackson:
+    default-property-inclusion: non_null
+
+#
+# OpenAPI 3 spec, varsayılan yol `/v3/api-docs` üzerinden yayınlanır. Tüketici UI
+# Swagger değil; modern bir API reference olan **Scalar** (statik HTML +
+# self-hosted JS) `src/main/resources/static/index.html` üzerinden servis edilir.
+# Geriye uyumluluk için `/swagger` alias'ı `WebConfig.addViewControllers` ile
+# `/v3/api-docs`'a forward edilir.
+#
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  # springdoc-openapi-webmvc-core artifact'i Swagger UI içermez; aşağıdaki
+  # `swagger-ui` bloğu BİLİNÇLİ olarak yok. UI tarafı Scalar'da (`/`).
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+mersel:
+  signer:
+    smartcard-config: classpath:smartcard-config.xml
+
+    # ----------------------------------------------------------------------
+    # Masaüstü UI (splash + ana pencere + system tray) ayarları
+    # ----------------------------------------------------------------------
+    # Uygulama kullanıcı makinesinde çalıştığı için varsayılan olarak masaüstü
+    # destek katmanı AÇIK gelir: Spring Boot başlamadan önce küçük bir Swing
+    # splash screen, hazır olunca Mersel banner ve hızlı eylem butonları içeren
+    # bir ana pencere ile sistem tepsisinde (system tray) bir simge.
+    #
+    # Server / Docker / CI gibi headless ortamlarda otomatik devre dışı kalır
+    # (`GraphicsEnvironment.isHeadless()` veya `java.awt.headless=true`).
+    # Manuel kapatmak için:
+    #   export MERSEL_AGENT_UI=false        # tamamen kapat
+    #   export MERSEL_AGENT_UI_SPLASH=false # sadece splash
+    #   export MERSEL_AGENT_UI_WINDOW=false # sadece ana pencere
+    #   export MERSEL_AGENT_UI_TRAY=false   # sadece tray
+    # ----------------------------------------------------------------------
+    ui:
+      enabled: ${MERSEL_AGENT_UI:true}
+      splash-enabled: ${MERSEL_AGENT_UI_SPLASH:true}
+      window-enabled: ${MERSEL_AGENT_UI_WINDOW:true}
+      tray-enabled: ${MERSEL_AGENT_UI_TRAY:true}
+      # Sistem tepsisindeki "Aç" menü öğesinin işaret ettiği URL. Boş bırakılırsa
+      # `http://<server.address>:<server.port>/` (Scalar API reference) hesaplanır.
+      open-url: ${MERSEL_AGENT_UI_URL:}
+
+    # ----------------------------------------------------------------------
+    # Otomatik güncelleme — GitHub Releases tabanlı
+    # ----------------------------------------------------------------------
+    # Uygulama hazır olduğunda arka plan thread'inde GitHub API'sini çağırır,
+    # `tag_name` (vX.Y.Z) → mevcut sürüm karşılaştırması yapar. Yeni sürüm
+    # varsa system tray menüsüne "Yeni sürüm v… — indir" öğesi ve bildirim
+    # eklenir. REST üzerinden `/update/status` ile sorgulanabilir.
+    #
+    # GitHub Releases tagging sözleşmesi: `vMAJOR.MINOR.PATCH` ve yayınlanan
+    # release'e executable jar (`mersel-dss-agent-signer-api-X.Y.Z.jar`)
+    # asset olarak eklenmiş olmalıdır. Eklenmediği durumda tray menüsü
+    # release sayfasını (`html_url`) açacak şekilde fallback yapar.
+    # ----------------------------------------------------------------------
+    update:
+      enabled: ${MERSEL_AGENT_UPDATE:true}
+      check-on-startup: ${MERSEL_AGENT_UPDATE_ON_STARTUP:true}
+      repository: ${MERSEL_AGENT_UPDATE_REPO:mersel-dss/mersel-dss-agent-signer-java}
+      api-base-url: ${MERSEL_AGENT_UPDATE_API:https://api.github.com}
+      http-timeout-ms: ${MERSEL_AGENT_UPDATE_TIMEOUT_MS:5000}
+      asset-name-pattern: ${MERSEL_AGENT_UPDATE_ASSET_PATTERN:mersel-dss-agent-signer-api-.*\.jar}
+      prerelease-allowed: ${MERSEL_AGENT_UPDATE_PRERELEASE:false}
+
+    # ----------------------------------------------------------------------
+    # Sertifika zinciri tamamlama (AIA = Authority Information Access)
+    # ----------------------------------------------------------------------
+    # Akıllı kart genelde sadece end-entity sertifikayı taşır; PAdES-B-LT
+    # ve XAdES-B-LT seviyesinde tam chain'in imza içine gömülmesi gerekir.
+    # Bu yapı, end-entity'nin AIA.caIssuers URL'lerini takip ederek root
+    # CA'ya kadar HTTP üzerinden chain'i otomatik tamamlar.
+    #
+    # Kapatmak için: chain.aia-enabled: false
+    # ----------------------------------------------------------------------
+    chain:
+      aia-enabled: ${MERSEL_AGENT_AIA_ENABLED:true}
+      http-timeout-ms: ${MERSEL_AGENT_AIA_TIMEOUT_MS:3000}
+      max-depth: ${MERSEL_AGENT_AIA_MAX_DEPTH:8}
+
+    # Yerel uygulama olarak loopback dışında origin'lere genelde kapanır.
+    # Tarayıcı uzantınızın origin'ini ENV var ile aktarın:
+    #   export MERSEL_AGENT_CORS_ORIGINS="https://app.example.com,chrome-extension://abcdef..."
+    cors-allowed-origins: ${MERSEL_AGENT_CORS_ORIGINS:http://localhost:*,https://localhost:*,http://127.0.0.1:*,https://127.0.0.1:*}
+    extra-lib-search-paths: []
+    # ----------------------------------------------------------------------
+    # PKCS#11 paylaşımlı kütüphane arama yolları (per-OS)
+    #
+    # TÜBİTAK ma3api'nin kullandığı vendor klasörlerini ve Türkiye'de yaygın
+    # e-imza istemci kurulumlarının yerleştirdiği konumları kapsar. Sıralama
+    # önemli — üstteki yollar daha önce taranır. Kullanıcı kendi vendor
+    # klasörünü `mersel.signer.extra-lib-search-paths` ile EN ÖNE ekleyebilir.
+    # ----------------------------------------------------------------------
+    pkcs11-search-paths-windows:
+      # Default Windows DLL search paths
+      - C:\Windows\System32
+      - C:\Windows\SysWOW64
+      # AKIS / Kamu SM AKiA (Türkçe i)
+      - C:\Program Files\AKIS\bin
+      - C:\Program Files (x86)\AKIS\bin
+      - C:\Program Files\AKiA
+      - C:\Program Files (x86)\AKiA
+      - C:\Program Files\AKiA\bin
+      - C:\Program Files (x86)\AKiA\bin
+      # SafeNet / Thales / Aladdin
+      - C:\Program Files\SafeNet\Authentication\SAC\x32
+      - C:\Program Files\SafeNet\Authentication\SAC\x64
+      - C:\Program Files (x86)\SafeNet\Authentication\SAC\x32
+      - C:\Program Files (x86)\SafeNet\Authentication\SAC\x64
+      # A-Trust / SafeSign / StarCOS
+      - C:\Program Files\A-Trust\acos
+      - C:\Program Files\A.E.T. Europe B.V.\SafeSign\Win32
+      - C:\Program Files\A.E.T. Europe B.V.\SafeSign\Win64
+      - C:\Program Files (x86)\A.E.T. Europe B.V.\SafeSign\Win32
+      # Gemalto / Thales IDPrime
+      - C:\Program Files\Gemalto\IDGo 800 PKCS#11
+      - C:\Program Files (x86)\Gemalto\IDGo 800 PKCS#11
+      # nCipher / Entrust nShield
+      - C:\Program Files\nCipher\nfast\bin
+      # SoftHSM (geliştirici)
+      - C:\Program Files\SoftHSM2\lib
+      - C:\Program Files (x86)\SoftHSM2\lib
+      # KOBIL mIDentity
+      - C:\Program Files\KOBIL\midentity client
+      - C:\Program Files (x86)\KOBIL\midentity client
+    pkcs11-search-paths-macos:
+      # Standart macOS paths
+      - /usr/local/lib
+      - /usr/local/lib/pkcs11
+      - /opt/homebrew/lib
+      - /opt/homebrew/lib/pkcs11
+      # AKIS / AKiA — Kamu SM macOS Akia paketi (.pkg/.dmg)
+      - /usr/local/lib/akis
+      - /Library/Akis
+      - /Library/Akia
+      - /Library/AKiA
+      - /Library/Application Support/AKIS
+      - /Library/Application Support/AKiA
+      - /Applications/AKIS.app/Contents/MacOS
+      - /Applications/AKiA.app/Contents/MacOS
+      - /usr/local/Cellar/akis/lib
+      - /usr/local/Cellar/akia/lib
+      # OpenSC (geliştirici / pcsclite)
+      - /Library/OpenSC/lib
+      # SafeNet / Aladdin eToken framework
+      - /Library/SafeNet/lib
+      - /Library/Frameworks/eToken.framework/Versions/A
+      # Gemalto / Thales
+      - /Library/Gemalto/IDGo 800 PKCS11
+      # SoftHSM
+      - /usr/local/lib/softhsm
+      - /opt/homebrew/lib/softhsm
+    pkcs11-search-paths-linux:
+      # Distro standart yolları (Debian/Ubuntu, RHEL/CentOS, Pardus)
+      - /usr/lib
+      - /usr/lib64
+      - /usr/lib/x86_64-linux-gnu
+      # ARM64 (Raspberry Pi 4/5, AWS Graviton, Apple Silicon Linux VM'leri,
+      # Pardus ARM build) — multiarch dizininde vendor libler buraya kurulur.
+      - /usr/lib/aarch64-linux-gnu
+      - /usr/local/lib/aarch64-linux-gnu
+      - /usr/local/lib
+      - /usr/local/lib64
+      - /usr/lib/pkcs11
+      - /usr/local/lib/pkcs11
+      # AKIS / AKiA — Pardus / Ubuntu deb veya rpm paketleri
+      - /usr/lib/akis
+      - /usr/lib/akia
+      - /usr/lib64/akis
+      - /usr/local/lib/akis
+      - /opt/akis
+      - /opt/akia
+      - /opt/akis/lib
+      # SafeNet / Aladdin eToken
+      - /opt/eToken/lib
+      - /opt/safenet/lib
+      # nCipher / Entrust nShield
+      - /opt/nfast/toolkits/pkcs11
+      # SafeNet Luna
+      - /usr/safenet/lunaclient/lib
+      # SoftHSM
+      - /usr/lib/softhsm
+      - /usr/local/lib/softhsm
+      - /usr/lib/x86_64-linux-gnu/softhsm
+      - /usr/lib/aarch64-linux-gnu/softhsm

@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>2.7.18</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>io.mersel.dss</groupId>
+  <artifactId>mersel-dss-agent-signer-api</artifactId>
+  <version>3.0.0</version>
+  <packaging>jar</packaging>
+  <name>mersel-dss-agent-signer-api</name>
+  <description>Mersel DSS Agent — yerel PKCS#11 akıllı kart imzalama servisi
+        (TÜBİTAK bağımsız). XAdES (CounterSignature dahil) + PAdES imzalama,
+        kart/sertifika listeleme, OCSP/CRL revocation. Sunucu-tarafı kardeşi
+        mersel-dss-server-signer-api ile ortak API kontratını paylaşır.
+        JDK 1.8 / Spring Boot 2.7 hattı.</description>
+  <url>https://github.com/mersel-dss/mersel-dss-agent-signer-java</url>
+
+  <organization>
+    <name>Mersel DSS</name>
+    <url>https://github.com/mersel-dss</url>
+  </organization>
+
+  <licenses>
+    <!--
+            Lisans: Apache-2.0 + Mersel Marka Atıf Eki (Brand Attribution
+            Addendum). Saf Apache-2.0 değil — kaynak kodu hâlâ permissive
+            ama UI'daki Mersel marka göstergeleri (splash brand, MainWindow
+            banner, footer mersel.io credit) Ek'in 2. Maddesi gereği
+            korunmak zorundadır. SPDX otomatik dedektörleri için custom
+            referans: LicenseRef-Mersel-Brand-Attribution (base: Apache-2.0).
+            Tam metin LICENSE; marka politikası TRADEMARK.md; korunacak
+            atıfların listesi NOTICE.
+        -->
+    <license>
+      <name>Apache-2.0 WITH Mersel-Brand-Attribution-Addendum</name>
+      <url>https://github.com/mersel-dss/mersel-dss-agent-signer-java/blob/main/LICENSE</url>
+      <distribution>repo</distribution>
+      <comments>Apache License 2.0 with the Mersel Brand Attribution Addendum
+        attached under Section 4. See LICENSE, NOTICE, and TRADEMARK.md at
+        the project root.</comments>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:https://github.com/mersel-dss/mersel-dss-agent-signer-java.git</connection>
+    <developerConnection>scm:git:git@github.com:mersel-dss/mersel-dss-agent-signer-java.git</developerConnection>
+    <url>https://github.com/mersel-dss/mersel-dss-agent-signer-java</url>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub Issues</system>
+    <url>https://github.com/mersel-dss/mersel-dss-agent-signer-java/issues</url>
+  </issueManagement>
+
+  <properties>
+    <!--
+            *** Build, JRE 1.8'i HEDEFLER ***
+            Bytecode 1.8 olur. JDK 1.8 ile build edildiğinde source/target
+            kullanılır; JDK 9+ ile build edildiğinde maven-compiler-plugin
+            otomatik olarak release=8 flag'ine geçer ve eski API'leri
+            kullanmaya çalışan kodu compile-time'da yakalar.
+        -->
+    <java.version>1.8</java.version>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <!-- Dependency versions -->
+    <bouncycastle.version>1.70</bouncycastle.version>
+    <itext.version>7.2.5</itext.version>
+    <itext5.version>5.5.13.3</itext5.version>
+    <xades4j.version>1.7.0</xades4j.version>
+    <springdoc.version>1.7.0</springdoc.version>
+    <json.version>20231013</json.version>
+    <commons-io.version>2.11.0</commons-io.version>
+    <commons-lang3.version>3.12.0</commons-lang3.version>
+    <okhttp.version>4.12.0</okhttp.version>
+
+    <!-- Build plugin versions -->
+    <spotless.version>2.27.2</spotless.version>
+    <jacoco.version>0.8.11</jacoco.version>
+    <license-plugin.version>4.3</license-plugin.version>
+    <enforcer.version>3.4.1</enforcer.version>
+    <dependency-check.version>9.0.9</dependency-check.version>
+    <cyclonedx.version>2.9.1</cyclonedx.version>
+
+    <!--
+            JaCoCo line-coverage baseline. Opt-in profile (`quality`) içinde
+            uygulanır; default `mvn verify`'da gate yok. Yeni testler
+            eklendikçe yükseltilir.
+        -->
+    <jacoco.line.minimum>0.15</jacoco.line.minimum>
+  </properties>
+
+  <dependencies>
+    <!-- Spring Boot 2.7 (Java 8 destekli son 2.x hattı) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!--
+          OpenAPI 3 spec generator — Spring Boot 2.x ile uyumlu springdoc 1.x.
+          `webmvc-core` artifact'i sadece `/v3/api-docs` JSON üretimi yapar; bundled
+          Swagger UI webjar'ı (~3 MB) GETİRMEZ. UI tarafında Scalar (modern API
+          reference) kullanıyoruz (`src/main/resources/static/index.html`).
+        -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-webmvc-core</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+
+    <!--
+          BouncyCastle: certificate parsing, CMS, CRL/OCSP.
+          Java 8 hattı için bcprov-jdk15on 1.70 (jdk15on = JDK 1.5+ build,
+          son sürümlerinde JDK 8'i destekleyen son artifact). xades4j 1.7.x
+          ile uyumluluk için 1.70 sürümünde tutuyoruz.
+        -->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk15on</artifactId>
+      <version>${bouncycastle.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk15on</artifactId>
+      <version>${bouncycastle.version}</version>
+    </dependency>
+
+    <!-- iText 7 for PAdES signing (com.itextpdf.kernel / signatures) -->
+    <dependency>
+      <groupId>com.itextpdf</groupId>
+      <artifactId>kernel</artifactId>
+      <version>${itext.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.itextpdf</groupId>
+      <artifactId>sign</artifactId>
+      <version>${itext.version}</version>
+    </dependency>
+
+    <!--
+          iText 5 (com.itextpdf.text.*) — tr.com.cs.imz.websocket.PDFUtil
+          başvuru PDF formunu bu API ile üretiyor. iText 7 ile farklı
+          namespace'lerde olduğundan birlikte yaşayabilirler.
+        -->
+    <dependency>
+      <groupId>com.itextpdf</groupId>
+      <artifactId>itextpdf</artifactId>
+      <version>${itext5.version}</version>
+    </dependency>
+
+    <!--
+          org.json — tr.com.cs.imz.websocket.model.* sınıfları JSON
+          serileştirme için org.json.JSONObject kullanıyor.
+        -->
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>${json.version}</version>
+    </dependency>
+
+    <!-- XAdES signing (Apache Santuario tabanlı) — Java 8 uyumlu 1.7.x -->
+    <dependency>
+      <groupId>com.googlecode.xades4j</groupId>
+      <artifactId>xades4j</artifactId>
+      <version>${xades4j.version}</version>
+    </dependency>
+
+    <!-- Apache Commons -->
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>${commons-io.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>${commons-lang3.version}</version>
+    </dependency>
+
+    <!-- OkHttp 4.12 — Java 8 hâlâ destekli -->
+    <dependency>
+      <groupId>com.squareup.okhttp3</groupId>
+      <artifactId>okhttp</artifactId>
+      <version>${okhttp.version}</version>
+    </dependency>
+
+    <!-- Jackson XML (config parser) -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-xml</artifactId>
+    </dependency>
+
+    <!--
+          NOT: GIB e-Belge başvuru istemcisi (tr.com.cs.imz.websocket.*) artık
+          binary jar yerine birebir kaynak olarak src/main/java/tr/com/cs altında
+          bulunuyor. CSSigner.jar + IAIK PKCS#11 Wrapper + native binary'leri
+          (toplam ~5.6 MB ölü ağırlık) bizim kodumuzun referans vermediği için
+          kaldırıldı. PKCS#11 erişimi Sun JDK built-in provider üzerinden
+          (sun.security.pkcs11.SunPKCS11) yapılıyor.
+        -->
+
+    <!-- Test -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+      <exclusions>
+        <!--
+                    org.json:json (20231013) projemizde tr.com.cs.imz.websocket.* için
+                    runtime dependency. Spring Boot Test ek olarak vaadin'in
+                    android-json shadow'unu getirir; aynı `org.json.JSONObject`
+                    sınıfı iki jar'dan birden gelir ve classpath ambiguity warning'i
+                    üretir. android-json'u test scope'undan çıkarıyoruz.
+                -->
+        <exclusion>
+          <groupId>com.vaadin.external.google</groupId>
+          <artifactId>android-json</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+          OkHttp MockWebServer — `GitHubReleaseClient` testlerinde gerçek
+          api.github.com çağırmak yerine localhost'ta tutulan bir HTTP server
+          ile fixture JSON döndürürüz. okhttp ile aynı sürümde.
+        -->
+    <dependency>
+      <groupId>com.squareup.okhttp3</groupId>
+      <artifactId>mockwebserver</artifactId>
+      <version>${okhttp.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>mersel-dss-agent-signer-api</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <mainClass>io.mersel.dss.agent.api.SignerApplication</mainClass>
+          <executable>true</executable>
+        </configuration>
+      </plugin>
+
+      <!--
+              Compiler: Spring Boot parent zaten 3.10.1+ kullanır. Bizim için
+              kritik olan source/target = 1.8 — yukarıdaki property'lerde tanımlı.
+              JDK 9+ ile build edildiğinde maven-compiler-plugin OTOMATIK olarak
+              release=8 flag'ine geçer ve bytecode JRE 1.8 uyumlu olur.
+            -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>${maven.compiler.source}</source>
+          <target>${maven.compiler.target}</target>
+        </configuration>
+      </plugin>
+
+      <!--
+              Enforcer: build ortamı için minimum gereksinimler.
+              Maven 3.6.3+ ve JDK 1.8+ olmalı (parent build kurar; biz alt sınır
+              koyuyoruz, üst sınır YOK çünkü JDK 11/17/21 ile build edip JRE 1.8
+              hedeflemek mümkün ve istenir).
+            -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>${enforcer.version}</version>
+        <executions>
+          <execution>
+            <id>enforce-build-environment</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireMavenVersion>
+                  <version>[3.6.3,)</version>
+                </requireMavenVersion>
+                <requireJavaVersion>
+                  <version>[1.8,)</version>
+                </requireJavaVersion>
+              </rules>
+              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+              Surefire — Spring Boot parent'tan gelir. JaCoCo agent argLine'ı
+              `@{argLine}` ile zincirleyerek koruyoruz (quality profile'ında
+              agent eklendiğinde otomatik karışır).
+            -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!--
+            -Djava.awt.headless=true: UI testleri (Splash/MainWindow/Tray) Mac dev
+            makinelerinde Aqua LAF'ı initialize etmesin diye zorunlu — `show()`/`install()`
+            metotları GraphicsEnvironment.isHeadless() guard'ından döner ve testler
+            CI'da olduğu gibi predictable şekilde no-op davranışını doğrular.
+          -->
+          <argLine>@{argLine} -Xmx512m -Djava.awt.headless=true</argLine>
+        </configuration>
+      </plugin>
+
+      <!--
+              JaCoCo: prepare-agent default fazda; argLine'ı set ettiği için
+              Surefire'ın @{argLine} placeholder'ı düzgün resolve olur.
+              report ve check execution'ları opt-in `quality` profile'ında.
+            -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <configuration>
+          <excludes>
+            <exclude>tr/com/cs/**</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+              Spotless: kullanıma sunulur ama default lifecycle'a BAĞLI DEĞİL.
+              `mvn spotless:apply` veya `mvn spotless:check` ile manuel çalışır.
+              `mvn package` ve `mvn verify` Spotless'a takılmaz.
+            -->
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless.version}</version>
+        <configuration>
+          <java>
+            <includes>
+              <include>src/main/java/io/mersel/**/*.java</include>
+              <include>src/test/java/io/mersel/**/*.java</include>
+            </includes>
+            <googleJavaFormat>
+              <version>1.7</version>
+              <style>GOOGLE</style>
+            </googleJavaFormat>
+            <removeUnusedImports/>
+            <importOrder>
+              <order>java,javax,org,com,io,tr,</order>
+            </importOrder>
+            <trimTrailingWhitespace/>
+            <endWithNewline/>
+          </java>
+          <pom>
+            <sortPom>
+              <expandEmptyElements>false</expandEmptyElements>
+              <keepBlankLines>true</keepBlankLines>
+            </sortPom>
+          </pom>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+          `mvn -P quality verify` ile JaCoCo coverage gate + license header
+          check çalışır. CI/CD'de tetiklenmesi önerilir; lokalde isteğe bağlı.
+        -->
+    <profile>
+      <id>quality</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>${jacoco.version}</version>
+            <executions>
+              <execution>
+                <id>report</id>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+                <phase>verify</phase>
+              </execution>
+              <execution>
+                <id>check-line-coverage</id>
+                <goals>
+                  <goal>check</goal>
+                </goals>
+                <phase>verify</phase>
+                <configuration>
+                  <rules>
+                    <rule>
+                      <element>BUNDLE</element>
+                      <limits>
+                        <limit>
+                          <counter>LINE</counter>
+                          <value>COVEREDRATIO</value>
+                          <minimum>${jacoco.line.minimum}</minimum>
+                        </limit>
+                      </limits>
+                    </rule>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>com.mycila</groupId>
+            <artifactId>license-maven-plugin</artifactId>
+            <version>${license-plugin.version}</version>
+            <configuration>
+              <licenseSets>
+                <licenseSet>
+                  <header>etc/license-header.txt</header>
+                  <includes>
+                    <include>src/main/java/io/mersel/**/*.java</include>
+                    <include>src/test/java/io/mersel/**/*.java</include>
+                  </includes>
+                  <excludes>
+                    <exclude>src/main/java/tr/com/cs/**/*.java</exclude>
+                  </excludes>
+                </licenseSet>
+              </licenseSets>
+              <properties>
+                <owner>Mersel DSS</owner>
+                <year>2026</year>
+              </properties>
+              <mapping>
+                <java>SLASHSTAR_STYLE</java>
+              </mapping>
+            </configuration>
+            <executions>
+              <execution>
+                <id>check-license-headers</id>
+                <goals>
+                  <goal>check</goal>
+                </goals>
+                <phase>verify</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!--
+          `mvn -P security verify` ile OWASP dependency-check + CycloneDX SBOM
+          üretimi birlikte çalışır. NVD API çekimi yavaş olduğu için default'ta
+          kapalı; CI'da yalnız main push'ta tetiklenir.
+
+          SBOM çıktıları: target/bom.xml + target/bom.json (CycloneDX schema
+          v1.6). Release workflow'u bunları GitHub Release asset'i olarak
+          publish eder; downstream tüketiciler (KOBİ entegratörleri, kurumsal
+          güvenlik tarayıcıları) BouncyCastle / iText / xades4j CVE
+          patch-önceliğini SBOM üzerinden hesaplayabilir.
+        -->
+    <profile>
+      <id>security</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>${dependency-check.version}</version>
+            <configuration>
+              <!-- CVSS >= 8.0 (high+) raporlanırsa build kırılır -->
+              <failBuildOnCVSS>8</failBuildOnCVSS>
+              <suppressionFiles>
+                <suppressionFile>etc/owasp-suppressions.xml</suppressionFile>
+              </suppressionFiles>
+              <skipSystemScope>true</skipSystemScope>
+            </configuration>
+            <executions>
+              <execution>
+                <id>owasp-check</id>
+                <goals>
+                  <goal>check</goal>
+                </goals>
+                <phase>verify</phase>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.cyclonedx</groupId>
+            <artifactId>cyclonedx-maven-plugin</artifactId>
+            <version>${cyclonedx.version}</version>
+            <configuration>
+              <projectType>application</projectType>
+              <schemaVersion>1.6</schemaVersion>
+              <outputFormat>all</outputFormat>
+              <outputName>bom</outputName>
+              <includeBomSerialNumber>true</includeBomSerialNumber>
+              <includeCompileScope>true</includeCompileScope>
+              <includeProvidedScope>true</includeProvidedScope>
+              <includeRuntimeScope>true</includeRuntimeScope>
+              <includeSystemScope>true</includeSystemScope>
+              <includeTestScope>false</includeTestScope>
+              <includeLicenseText>false</includeLicenseText>
+            </configuration>
+            <executions>
+              <execution>
+                <id>cyclonedx-sbom</id>
+                <goals>
+                  <goal>makeAggregateBom</goal>
+                </goals>
+                <phase>package</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!--
+          `mvn -P sbom package` ile sadece CycloneDX SBOM üretir; OWASP
+          dependency-check ÇALIŞMAZ (NVD çekimi yavaş, release workflow'unu
+          gereksiz yere yavaşlatır). Release tag'leme akışı bunu doğrudan
+          çağırır.
+        -->
+    <profile>
+      <id>sbom</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.cyclonedx</groupId>
+            <artifactId>cyclonedx-maven-plugin</artifactId>
+            <version>${cyclonedx.version}</version>
+            <configuration>
+              <projectType>application</projectType>
+              <schemaVersion>1.6</schemaVersion>
+              <outputFormat>all</outputFormat>
+              <outputName>bom</outputName>
+              <includeBomSerialNumber>true</includeBomSerialNumber>
+              <includeCompileScope>true</includeCompileScope>
+              <includeProvidedScope>true</includeProvidedScope>
+              <includeRuntimeScope>true</includeRuntimeScope>
+              <includeSystemScope>true</includeSystemScope>
+              <includeTestScope>false</includeTestScope>
+              <includeLicenseText>false</includeLicenseText>
+            </configuration>
+            <executions>
+              <execution>
+                <id>cyclonedx-sbom</id>
+                <goals>
+                  <goal>makeAggregateBom</goal>
+                </goals>
+                <phase>package</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

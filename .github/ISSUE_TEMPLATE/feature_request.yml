@@ -1,0 +1,47 @@
+name: Özellik isteği
+description: Yeni bir özellik veya iyileştirme öner
+title: "[FEAT] "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Çözmek istediğin problem
+      description: Hangi sorun bu özelliği gerektiriyor?
+      placeholder: AKIS kartı X kart ATR'i tanınmıyor; manuel wrapperFile vermek zorundayım.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Önerilen çözüm
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatifler
+      description: Düşündüğün ama elemediğin çözümler
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Etki alanı
+      options:
+        - PAdES
+        - XAdES
+        - PKCS#11 / akıllı kart
+        - Sertifika doğrulama (OCSP/CRL/PKIX)
+        - GİB başvuru entegrasyonu
+        - REST API kontratı
+        - Build / CI / dokümantasyon
+        - Diğer
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Ek bağlam (opsiyonel)

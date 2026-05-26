@@ -1,0 +1,781 @@
+Copyright 2026 Mersel DSS
+
+Licensed under the Apache License, Version 2.0 (the "License")
+WITH the additional Mersel Brand Attribution Addendum set forth below.
+
+You may not use this file except in compliance with the License and the
+Addendum. The base Apache License may also be obtained at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+PART I — APACHE LICENSE 2.0 (verbatim)
+================================================================================
+
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+================================================================================
+BÖLÜM II — MERSEL MARKA ATIF EKİ (asıl metin: Türkçe)
+================================================================================
+
+Bu ek hüküm, yukarıdaki Apache Lisansı 2.0'nin 4. Maddesinin son
+paragrafı uyarınca Lisansör tarafından eklenen "ek lisans şartı"
+niteliğindedir ("Marka Atıf Eki" veya "Ek"). Ek, yukarıdaki Lisansla
+birlikte tek bir bütün oluşturur; aralarında çelişki bulunması hâlinde
+bu Ek'in lafzı esas alınır.
+
+ÖNSÖZ — BU EK'İN GEREKÇESİ VE KARŞILIĞI (CONSIDERATION)
+-------------------------------------------------------
+
+Türkiye'nin yerel e-İmza ekosistemi — akıllı kart sürücüleri, PKCS#11
+modülleri, TÜBİTAK-ESYA bağımlılıkları, GİB e-Belge entegrasyonu, GİB
+e-Fatura başvuru süreçleri, kalifiye sertifika doğrulama altyapısı —
+tarihsel olarak özel mülk yazılım sağlayıcılarının yüksek lisans
+ücretli, kapalı kaynak ürünleriyle çevrelenmiş; KOBİ'ler, serbest
+mali müşavirler, geliştiriciler ve kurumsal entegratörler için açık
+kaynaklı, ücretsiz, denetlenebilir ve TÜBİTAK-ESYA bağımsız bir
+alternatif uzun süre eksik kalmıştır.
+
+Mersel DSS, bu yapısal boşluğu kapatmak amacıyla Mersel DSS Agent
+Signer projesini kamu yararına ve açık kaynak olarak geliştirmiş;
+PKCS#11 reflection katmanı, low-level kart tipi tespiti (ATR + lib
+eşleştirmesi), PIN'siz public sertifika listeleme, PAdES-B / XAdES-BES
+/ XAdES Counter-Signature üretimi, GİB e-Fatura başvuru entegrasyonu
+ve yerel sertifika zincir doğrulama altyapısı dahil olmak üzere
+ekosisteme — alanında ilk kez bu kapsamda — sistemik bir ortak iyi
+(commons) sunmuştur. Bu katkı, sıfırdan benzer bir çözüm üretmenin
+gerektireceği kümülatif iş gücünü, finansal kaynağı ve uzun yıllara
+yayılı teknik birikimi tüm Türkiye yazılım topluluğunun erişimine
+açmıştır.
+
+Yazılım'ın permissive bir lisans (Apache 2.0) altında dağıtılması;
+isteyen herkesin — gerçek veya tüzel kişi, ticari veya akademik —
+Yazılım'ı serbestçe alıp kapalı kaynak ürününe entegre etmesine,
+ticarileştirmesine ve hatta barındırılmış bir hizmet (SaaS) olarak
+sunmasına izin verir. Bu serbestlik, Mersel DSS'nin bilinçli bir
+tercihidir; pazardaki yerleşik bulut çözümlerinin kapalı ekosistem
+yaklaşımına alternatif olarak Yazılım, paylaşılan açık altyapı
+olarak tasarlanmıştır.
+
+Bu cömertliğin makul karşılığı olarak, Yazılım'ın özgün katkı
+sahibini görünür kılan üç küçük arayüz unsurunun korunması
+istenmektedir. Bu unsurlar — splash penceresindeki "MERSEL DSS"
+marka işareti, ana pencerenin banner'ı ve altbilgi satırındaki
+mersel.io atıf cümlesi — yalnızca Lisansör'ün sembolik tanınması
+değil, aynı zamanda:
+
+   (i)   açık kaynak yazılımın değer zincirinde köken
+         (provenance) belirsizliğinin önlenmesi,
+
+   (ii)  güvenlik açığı bildirim kanalının (vulnerability
+         disclosure) son kullanıcı için tek tıkla erişilebilir
+         kalması,
+
+   (iii) Türkiye e-İmza ekosisteminde sağlıklı ve doğrulanabilir
+         bir referans noktasının sürdürülmesi,
+
+   (iv)  Mersel DSS'nin ekosisteme yatırdığı kümülatif emeğin
+         kamusal görünürlüğünün korunması,
+
+   (v)   son kullanıcının "bu yazılımı kim geliştirmiş, kime
+         güvenebilirim?" sorusunun şeffaf yanıtının korunması
+
+gibi meşru ve sayılabilir menfaatlere dayanır.
+
+Bu Ek, Apache Lisansı 2.0 ile birlikte bir SÖZLEŞMESEL DENGE
+oluşturur: Lisans Sahibi (Siz), Yazılım'a ait tüm telif haklarını,
+patent haklarını ve dağıtım haklarını ÜCRETSİZ ve PERMISSIVE
+biçimde kullanma yetkisine sahip olursunuz; Lisansör ise yalnızca
+üç küçük kullanıcı arayüzü unsuru ile sınırlı, ölçüsü orantılı bir
+GÖRÜNÜRLÜK karşılığı (consideration) talep eder. Bu denge
+sözleşmenin temel sebebi ve makul karşılığıdır; Lisans Sahibi
+Yazılım'ı kullanmaya başladığı andan itibaren bu dengeyi kabul
+etmiş sayılır.
+
+Marka Atıfları'nın korunması yükümlülüğü, Yazılım'ın çoğaltıldığı,
+dağıtıldığı, değiştirildiği veya başka herhangi bir biçimde
+kullanıldığı her durumda KAYITSIZ ŞARTSIZ geçerlidir. Yazılım'ı
+yeniden adlandırmak, kendi markası altında dağıtmak veya bir
+başka ürünün içine entegre etmek bu yükümlülüğü ortadan
+kaldırmaz. Yazılım'ı değiştiren taraflar, atıfları korumakla
+birlikte 3. Madde uyarınca Modifikasyon Bildirimi yapmakla da
+yükümlüdür; bu, son kullanıcının değişikliği görmesi ve
+değişikliğin sorumluluğunun değiştirene ait olduğunu anlaması
+içindir.
+
+1. Tanımlar.
+
+   "Marka Atıfları", Yazılım'ın orijinal, değiştirilmemiş hâlinde
+   kullanıcı arayüzünde görüntülenen ve aşağıdaki üç bileşenin
+   her birini ayrı ayrı ifade eder:
+
+      (a) Uygulama açılış (splash) penceresinde gösterilen
+          "MERSEL DSS" marka işareti, marka aksanı (renkli ince
+          çizgi) ve ürün başlığı ("Agent Signer");
+
+      (b) Ana uygulama penceresinin (MainWindow) üst kısmında
+          gösterilen Mersel banner / logo bloğu (lockup); ve
+
+      (c) Ana uygulama penceresinin altbilgi (footer) satırında
+          yer alan
+              "Türkiye e-İmza süreçleri için mersel.io tarafından
+               açık kaynak olarak geliştirilmiştir."
+          ibaresi (makul çevirileri dahil) ve
+          https://mersel.io adresine giden etkin köprü (hyperlink).
+
+   "Yazılım", bu Lisans ve Ek kapsamında dağıtıma sunulan
+   "Mersel DSS Agent Signer" eseridir.
+
+   "Türev Eser", Apache Lisansı 2.0 Madde 1'de tanımlandığı
+   anlamda anlaşılır.
+
+   "Mersel Markaları", "Mersel", "Mersel DSS", "Mersel DSS Agent
+   Signer" sözcük markaları, Mersel logo bloğu ve mersel.io alan
+   adı dahil olmak üzere Mersel DSS'ye ait tüm tescilli veya
+   tescilsiz markaları ifade eder.
+
+2. Koruma Yükümlülüğü (KAYITSIZ — Hiçbir Koşul Altında
+   Kaldırılamaz).
+
+   Lisans Sahibi (Siz), Yazılım'ı ve Türev Eserleri herhangi bir
+   biçimde — kaynak ya da nesne formunda, kapalı kaynaklı bir
+   ürünün içine gömerek, ticari amaçla satarak veya ağ üzerinden
+   barındırılan bir hizmet (SaaS) olarak sunarak — çoğaltma,
+   değiştirme, dağıtma, alt-lisanslama ve ticarileştirme hakkına
+   sahipsiniz; üstelik değişikliklerinizi kamuya açma, kaynağını
+   paylaşma ya da açık kaynak yapma yükümlülüğünüz YOKTUR.
+
+   ANCAK; Yazılım'ın çoğaltıldığı, dağıtıldığı, değiştirildiği,
+   alt-lisanslandığı veya başka herhangi bir biçimde
+   kullanıldığı her durumda, yukarıda tanımlanan her bir
+   Marka Atıfı:
+
+      • mevcut,
+      • görünür,
+      • okunabilir, ve
+      • işlevsel olarak orijinaline eşdeğer
+
+   biçimde korunmak ZORUNDADIR.
+
+   Bu yükümlülük, aşağıdakiler dahil ancak bunlarla sınırlı
+   olmamak üzere TÜM kullanım biçimlerinde geçerlidir:
+
+      • dahili (in-house / kurumsal) kullanım;
+      • sınırlı veya bireysel dağıtım;
+      • ticari satış veya ücretli abonelik;
+      • kapalı kaynaklı bir başka ürünün içine entegrasyon;
+      • barındırılmış hizmet (SaaS) olarak sunum;
+      • eğitim, demo, sergi veya araştırma kullanımı;
+      • Yazılım'ın değiştirilmiş veya değiştirilmemiş her
+        türlü Türev Eser'i.
+
+   Yazılım'a kendi adınızı veya markanızı eklemeniz, bir
+   "compound" başlık altında dağıtmanız (örneğin "Mersel DSS
+   Agent Signer — XYZ Sürümü"), ya da Yazılım'ı tamamen yeniden
+   adlandırmaya çalışmanız bu yükümlülüğü ORTADAN KALDIRMAZ
+   veya azaltmaz. Marka Atıfları, Yazılım'ın kullanıldığı her
+   dağıtımda eksiksiz kalır.
+
+   Aşağıdaki davranışlar bu Lisans'ın esaslı ihlalini oluşturur
+   (sınırlayıcı olmamak üzere):
+
+      (i)    Marka Atıfı'nın tamamen kaldırılması veya
+             gizlenmesi;
+      (ii)   yer değiştirmesi sonucu kullanıcının normal görüş
+             alanından çıkarılması;
+      (iii)  okunmayacak kadar küçültülmesi veya kontrast/renk
+             yoluyla görsel olarak silikleştirilmesi;
+      (iv)   mersel.io köprüsünün devre dışı bırakılması, başka
+             bir adrese yönlendirilmesi veya işlevinin
+             engellenmesi;
+      (v)    içeriğinin başka bir markayla, sloganla veya kredi
+             ifadesiyle değiştirilmesi;
+      (vi)   Marka Atıfı'nın yalnızca "Hakkında" diyaloğu, gizli
+             menü veya benzer şekilde son kullanıcının normal
+             akışından izole edilmiş bir yere taşınması;
+      (vii)  Yazılım'ı çağıran ancak Marka Atıfları'nı kendi
+             sürecinde göstermeyen bir başka uygulama içine
+             gömmek (Yazılım kendi süreç sınırı içinde
+             gösterimini yapmak zorundadır);
+      (viii) Yazılım'ı, Marka Atıfları'nın gösteriminin teknik
+             olarak imkânsız olduğu bir biçime dönüştürmek
+             (örn. headless'a indirgemek) ve bu dönüştürmenin
+             ardından Yazılım'ı son kullanıcıya görsel arayüzlü
+             olarak yeniden sunmak.
+
+3. Modifikasyon Bildirimi (Modification Disclosure).
+
+   Yazılım'ı değiştirmeyi seçerseniz (Apache Lisansı 2.0 Madde
+   1'de tanımlanan biçimde bir Türev Eser üretirseniz),
+   Marka Atıfları'nı korumakla birlikte AŞAĞIDAKİ ek bildirimi
+   de eklemek zorundasınız:
+
+      (a) Türev Eser'in kullanıcı arayüzünde, son kullanıcı için
+          görünür ve makul biçimde erişilebilir bir yerde
+          (örneğin ana pencerenin altbilgisi, ayarlar/yardım
+          ekranının ilk satırı veya başlangıç ekranı), şu
+          niteliklere uygun bir bildirim göstermelisiniz:
+
+             • Türev Eser'i siz değiştirdiğinizi açıkça beyan
+               eden bir cümle;
+             • Türev Eser'in kimliğinizi taşıdığını
+               (varsa kendi marka adınız/sürümünüz);
+             • Mersel DSS'nin Türev Eser'in içeriğini ne ürettiği
+               ne de onayladığını ve Türev Eser'in olası
+               sonuçlarından sorumlu olmadığını net biçimde
+               belirten bir feragatname.
+
+          Önerilen örnek metin:
+
+             "Bu sürüm [Dağıtımcının Adı/Sürümü] tarafından
+              değiştirilmiştir. Orijinal yazar Mersel DSS bu
+              sürümü onaylamamıştır ve bu sürümden kaynaklanan
+              sonuçlardan sorumlu değildir."
+
+      (b) Apache Lisansı 2.0 Madde 4(b) uyarınca, değiştirilen
+          her kaynak dosyada "bu dosya değiştirilmiştir" şeklinde
+          açıklayıcı bir not bırakmalısınız.
+
+      (c) Yazılım'ı çağıran veya gömen bir başka uygulamanın
+          arayüzü, son kullanıcının Mersel DSS ürünü ile
+          karıştırmasını önleyecek biçimde açıkça farklı
+          tasarlanmalıdır.
+
+   Bu Madde'nin amacı, Marka Atıfları'nın korunması ile
+   Yazılım'ın değiştirilmiş bir Türev Eser ile karıştırılmasının
+   önlenmesi arasındaki dengeyi sağlamaktır.
+
+4. Onay Beyanı Yasağı (No Endorsement).
+
+   Marka Atıfları'nın bulundurulması, Mersel DSS'nin Türev Eser'i
+   ürettiği, onayladığı, sponsor olduğu, kalite güvencesi
+   verdiği, denetlediği ya da ticari/teknik ortağı olduğu
+   anlamına GELMEZ.
+
+   Türev Eser dağıtımcısı olarak Siz:
+
+      (a) doğrudan veya dolaylı yoldan böyle bir onay/destek
+          /sponsorluk/ortaklık/denetim/güvence imasında
+          bulunmamak;
+
+      (b) reklam, pazarlama, satış metinleri, ürün etiketi ve
+          son kullanıcı dokümantasyonunda bu tür yanıltıcı
+          bağlantılardan kaçınmak;
+
+      (c) gerektiğinde ek bir feragatname ile aradaki ilişkinin
+          gerçek niteliğini açıklamak
+
+   yükümlülüğü altındasınız.
+
+5. Marka Lisansı Verilmemesi.
+
+   Apache Lisansı 2.0 Madde 6 ile uyumlu olarak, bu Lisans (Ek
+   dahil) Size Mersel Markaları üzerinde herhangi bir mülkiyet,
+   lisans veya kullanım hakkı VERMEZ. Marka Atıfları'nın
+   korunması bir kullanım izni değil, ZORUNLU BİR ATIFTIR;
+   Marka Atıfları'nı korumanız, Mersel Markaları üzerinde size
+   herhangi bir hak doğurmaz.
+
+   Marka Atıfları'nın görüntülenmesi dışında kalan her tür
+   ticari, tanıtıcı, ürünleştirici veya kimlik oluşturucu
+   kullanım (kendi web sitenizde Mersel logosu kullanma,
+   "Mersel ortağı" iddia etme, alan adı veya sosyal medya
+   hesabı oluşturma vb.) Mersel DSS'nin önceden yazılı iznine
+   tabidir; TRADEMARK.md politikası izinli ve izinsiz
+   kullanımları ayrıntılandırır.
+
+6. Bağımsızlık ve Devamlılık.
+
+   2., 3., 4. ve 5. Maddelerdeki yükümlülükler, Yazılım'ın her
+   türlü değiştirilmesi, alt-lisanslanması veya yeniden
+   dağıtılması durumunda yürürlükte kalır ve aşağı yönlü tüm
+   alıcıları bağlar. Aşağı yöndeki bir alıcının bu maddelere
+   uymaması, ondan Yazılım'ı alan diğer alıcıların
+   yükümlülüğünü kaldırmaz; her alıcı kendi dağıtımı için
+   doğrudan Lisansör'e karşı sorumludur.
+
+7. Uygulanacak Hukuk.
+
+   Bu Ek'ten kaynaklanan veya bu Ek'le ilgili tüm uyuşmazlıkların
+   esasına Türkiye Cumhuriyeti hukuku uygulanır. Yetkili mahkemeler
+   İstanbul (Çağlayan) mahkemeleri ve icra daireleridir. Apache
+   Lisansı 2.0'nin esasına ilişkin hükümler bu maddeden
+   etkilenmez ve kendi şartlarına göre uygulanmaya devam eder.
+
+================================================================================
+PART II — MERSEL BRAND ATTRIBUTION ADDENDUM (English translation, for reference)
+================================================================================
+
+This Addendum is an "additional term" attached by the Licensor under
+the authority of the last paragraph of Section 4 of the Apache License
+2.0 above (the "Brand Attribution Addendum" or "Addendum"). The
+Addendum forms a single instrument together with the Apache License;
+in the event of any conflict, the Turkish text in Part II above shall
+prevail.
+
+PREAMBLE — RATIONALE AND CONSIDERATION
+--------------------------------------
+
+Türkiye's domestic e-signature ecosystem — smart card drivers, PKCS#11
+modules, TÜBİTAK-ESYA bindings, the Revenue Administration's (GİB)
+e-Document integration, e-Invoice enrolment workflows, and qualified
+certificate validation infrastructure — has historically been
+surrounded by proprietary vendors offering expensive, closed-source
+products. For SMEs, independent CPAs, developers, and enterprise
+integrators, an open-source, royalty-free, auditable, and
+TÜBİTAK-ESYA-independent alternative has long been absent.
+
+To address this structural gap, Mersel DSS has developed the Mersel
+DSS Agent Signer project as a public-interest, open-source
+contribution to the ecosystem, including a PKCS#11 reflection layer,
+low-level smart-card type detection (ATR + library matching),
+PIN-less public certificate listing, PAdES-B / XAdES-BES / XAdES
+Counter-Signature generation, GİB e-Invoice enrolment integration,
+and a local certificate-chain validation stack — collectively
+delivering, for the first time at this scope, a systemic "commons"
+to the field. The contribution makes available to the entire Turkish
+software community the cumulative engineering effort, capital, and
+multi-year domain knowledge that would otherwise be required to
+rebuild an equivalent solution from scratch.
+
+The Software is distributed under a permissive base license (Apache
+2.0), which permits anyone — natural or legal person, commercial or
+academic — to integrate the Software into closed-source products,
+monetize it, and even offer it as a hosted service (SaaS). This
+permissiveness is a deliberate choice by Mersel DSS; the Software
+is designed as shared open infrastructure rather than as part of
+the closed ecosystem approach taken by incumbent cloud vendors.
+
+As reasonable consideration for this generosity, the Licensor
+requests the preservation of three small user-interface elements
+that make the upstream contributor visible: the "MERSEL DSS" brand
+mark in the splash window, the banner in the main window, and the
+mersel.io attribution line in the footer. These elements are not
+merely symbolic recognition of the Licensor; they also serve:
+
+   (i)   to prevent provenance ambiguity in the open-source
+         value chain,
+
+   (ii)  to keep the vulnerability-disclosure channel one click
+         away from every end user,
+
+   (iii) to maintain a healthy and verifiable reference point in
+         Türkiye's e-signature ecosystem,
+
+   (iv)  to preserve the public visibility of the cumulative
+         work Mersel DSS has invested in the ecosystem, and
+
+   (v)   to safeguard the end user's transparent answer to
+         "who built this software and whom can I trust?".
+
+This Addendum, together with Apache License 2.0, forms a
+CONTRACTUAL BALANCE: You (the licensee) receive the right to use
+all copyright, patent, and distribution rights in the Software FREE
+OF CHARGE and on PERMISSIVE terms; the Licensor in turn requests
+only a proportionate VISIBILITY consideration, strictly limited to
+three small user-interface elements. This balance is the essential
+cause and reasonable consideration of the agreement; by beginning
+to use the Software, the licensee is deemed to have accepted this
+balance.
+
+The obligation to preserve the Brand Notices applies
+UNCONDITIONALLY to every reproduction, distribution, modification,
+or other use of the Software. Renaming the Software, distributing
+it under your own brand, or embedding it inside another product
+does not extinguish or reduce this obligation. Parties who modify
+the Software must, in addition to preserving the Brand Notices,
+comply with the Modification Disclosure obligations under
+Section 3 so that the end user can see the change and understand
+that the responsibility for the modification lies with the
+distributor.
+
+1. Definitions.
+
+   "Brand Notices" means, collectively, each of the following three
+   attribution elements as they appear in the unmodified upstream
+   Software's user interface:
+
+      (a) the "MERSEL DSS" brand mark, brand accent rule, and product
+          title rendered in the application splash window;
+
+      (b) the Mersel banner / logo lockup displayed at the top of the
+          main application window (MainWindow); and
+
+      (c) the footer credit line
+              "Türkiye e-İmza süreçleri için mersel.io tarafından
+               açık kaynak olarak geliştirilmiştir."
+          (including reasonable translations thereof) and the
+          active hyperlink to https://mersel.io.
+
+   "Software" means the work "Mersel DSS Agent Signer" distributed
+   under this License and Addendum. "Derivative Works" carries the
+   meaning given in Section 1 of the Apache License. "Mersel Marks"
+   means all of Mersel DSS's registered and unregistered trademarks,
+   including the "Mersel", "Mersel DSS", and "Mersel DSS Agent Signer"
+   word marks, the Mersel logo lockup, and the mersel.io domain.
+
+2. Preservation Requirement (UNCONDITIONAL — Brand Notices May
+   Not Be Removed Under Any Circumstance).
+
+   You may reproduce, modify, distribute, sublicense, and
+   commercialize the Software (including in closed-source,
+   proprietary, or hosted SaaS form) WITHOUT any obligation to
+   disclose, share, or open-source Your modifications, PROVIDED
+   THAT every Brand Notice remains present, visible, legible, and
+   functionally equivalent in the user interface in every
+   reproduction, distribution, modification, sublicensing, or
+   other use of the Software.
+
+   This obligation applies to ALL forms of use, including but not
+   limited to:
+
+      • internal (in-house / enterprise) use;
+      • limited or individual distribution;
+      • commercial sale or paid subscription;
+      • embedding inside another closed-source product;
+      • offering as a hosted (SaaS) service;
+      • educational, demonstration, exhibition, or research use;
+      • every Derivative Work, whether modified or unmodified.
+
+   Adding Your own name or brand to the Software, distributing it
+   under a compound title (e.g. "Mersel DSS Agent Signer — XYZ
+   Edition"), or attempting to rename the Software entirely does
+   NOT extinguish or reduce this obligation. The Brand Notices
+   remain intact in every distribution of the Software in any form.
+
+   The following constitute, without limitation, a material breach
+   of this License:
+
+      (i)    removing or hiding any Brand Notice;
+      (ii)   relocating a Brand Notice outside the user's normal
+             field of view;
+      (iii)  shrinking it below legibility or visually obscuring it
+             through contrast or color manipulation;
+      (iv)   disabling, redirecting, or otherwise impairing the
+             mersel.io hyperlink;
+      (v)    replacing the content of a Brand Notice with another
+             brand, slogan, or credit;
+      (vi)   moving a Brand Notice into an "About" dialog, hidden
+             menu, or similar isolated location separated from the
+             user's ordinary flow;
+      (vii)  embedding the Software inside another application that
+             calls the Software but does not display the Brand
+             Notices within its own process (the Software must
+             render the Brand Notices within its own process
+             boundary);
+      (viii) transforming the Software into a form in which the
+             Brand Notices technically cannot be displayed
+             (e.g. reducing it to headless mode) and then
+             re-exposing it to end users with a graphical
+             interface.
+
+3. Modification Disclosure.
+
+   If You choose to modify the Software (creating a Derivative
+   Work as defined in Section 1 of the Apache License 2.0), in
+   addition to preserving the Brand Notices, You MUST include the
+   following modification disclosure:
+
+      (a) In the Derivative Work's user interface, in a place
+          visible and reasonably accessible to the end user
+          (e.g. the footer of the main window, the first line of
+          the settings/help screen, or the startup screen), You
+          must display a notice that:
+
+             • clearly states that the Derivative Work has been
+               modified by You;
+             • identifies the Derivative Work as carrying Your
+               identity (Your brand name / version, if any);
+             • clearly disclaims that Mersel DSS neither produced
+               nor endorsed the Derivative Work, and is not
+               responsible for the consequences of the Derivative
+               Work.
+
+          Recommended example wording:
+
+             "This version has been modified by [Distributor's
+              Name / Edition]. The original author Mersel DSS has
+              not endorsed this version and is not responsible
+              for any outcomes arising from this version."
+
+      (b) In accordance with Section 4(b) of the Apache License
+          2.0, You must leave a prominent notice in every
+          modified source file stating that the file has been
+          changed.
+
+      (c) Any other application that calls or embeds the Software
+          must visibly distinguish its own user interface to
+          prevent the end user from confusing it with the Mersel
+          DSS product.
+
+   The purpose of this Section is to balance the preservation of
+   the Brand Notices with the prevention of confusion between the
+   Software and a modified Derivative Work.
+
+4. No Endorsement.
+
+   The presence of the Brand Notices does NOT mean that Mersel
+   DSS produced, endorsed, sponsored, vouched for the quality of,
+   audited, or commercially partnered with the Derivative Work.
+
+   As the distributor of a Derivative Work, You are under the
+   following obligations:
+
+      (a) not to imply, directly or indirectly, any such
+          endorsement, support, sponsorship, partnership, audit,
+          or assurance;
+
+      (b) to avoid such misleading associations in advertising,
+          marketing, sales copy, product labelling, and
+          end-user documentation;
+
+      (c) to add an additional disclaimer where necessary to
+          clarify the actual nature of the relationship.
+
+5. No Trademark License.
+
+   Consistent with Section 6 of the Apache License 2.0, this
+   License (including this Addendum) does NOT grant You any
+   ownership, license, or right of use in the Mersel Marks. The
+   preservation of the Brand Notices is not a permission to use
+   the Mersel Marks; it is a MANDATORY ATTRIBUTION. Preserving
+   the Brand Notices does not create any right in Your favour
+   over the Mersel Marks.
+
+   Any commercial, promotional, productizing, or identity-
+   establishing use beyond the display of the Brand Notices —
+   such as using the Mersel logo on Your own website, claiming
+   "Mersel partner" status, registering a domain or social
+   handle that incorporates the Mersel Marks, and so on — is
+   subject to Mersel DSS's prior written permission; the
+   TRADEMARK.md policy details which uses are permitted and
+   which require permission.
+
+6. Survival and Independence.
+
+   The obligations under Sections 2, 3, 4, and 5 of this Addendum
+   survive any modification, sublicensing, or redistribution of
+   the Software and bind all downstream recipients. The failure
+   of a downstream recipient to comply with these sections does
+   not relieve any other recipient receiving the Software from
+   them; each recipient is directly accountable to the Licensor
+   for their own distribution.
+
+7. Governing Law.
+
+   The laws of the Republic of Türkiye govern this Addendum and
+   any dispute arising out of or relating to it. The courts of
+   Istanbul (Çağlayan) shall have exclusive jurisdiction. The
+   substantive provisions of the Apache License 2.0 are not
+   affected by this clause and continue to apply on their own
+   terms.
+
+END OF MERSEL BRAND ATTRIBUTION ADDENDUM

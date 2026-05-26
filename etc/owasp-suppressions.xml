@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    OWASP Dependency-Check suppression file.
+
+    Sadece DOĞRULANMIŞ false-positive'ler için ekleyin. Her giriş bir
+    "notes" alanı + bir yorum içermeli; PR review'da bu metin tartışılır.
+
+    Format dokümantasyonu:
+    https://jeremylong.github.io/DependencyCheck/general/suppression.html
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!-- Örnek (commented):
+    <suppress>
+        <notes>2026-05-19: CVE-2024-XXXXX kuruluşumuz için uygulanabilir değil çünkü
+        bileşen sadece test scope'unda kullanılıyor.</notes>
+        <packageUrl regex="true">^pkg:maven/com\.example/.*$</packageUrl>
+        <cve>CVE-2024-XXXXX</cve>
+    </suppress>
+    -->
+
+</suppressions>

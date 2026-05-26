@@ -1,0 +1,40 @@
+{
+  "url": "https://api.github.com/repos/mersel-dss/mersel-dss-agent-signer-java/releases/123456",
+  "html_url": "https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v2.1.0",
+  "id": 123456,
+  "tag_name": "v2.1.0",
+  "name": "v2.1.0 — Auto-update + Scalar UI",
+  "draft": false,
+  "prerelease": false,
+  "created_at": "2026-06-14T18:00:00Z",
+  "published_at": "2026-06-15T10:00:00Z",
+  "assets": [
+    {
+      "url": "https://api.github.com/repos/mersel-dss/mersel-dss-agent-signer-java/releases/assets/1",
+      "id": 1,
+      "name": "checksums.txt",
+      "content_type": "text/plain",
+      "size": 256,
+      "browser_download_url": "https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v2.1.0/checksums.txt"
+    },
+    {
+      "url": "https://api.github.com/repos/mersel-dss/mersel-dss-agent-signer-java/releases/assets/2",
+      "id": 2,
+      "name": "mersel-dss-agent-signer-api-2.1.0.jar",
+      "content_type": "application/java-archive",
+      "size": 67108864,
+      "browser_download_url": "https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v2.1.0/mersel-dss-agent-signer-api-2.1.0.jar"
+    },
+    {
+      "url": "https://api.github.com/repos/mersel-dss/mersel-dss-agent-signer-java/releases/assets/3",
+      "id": 3,
+      "name": "mersel-dss-agent-signer-api-2.1.0-sources.jar",
+      "content_type": "application/java-archive",
+      "size": 8388608,
+      "browser_download_url": "https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v2.1.0/mersel-dss-agent-signer-api-2.1.0-sources.jar"
+    }
+  ],
+  "tarball_url": "https://api.github.com/repos/mersel-dss/mersel-dss-agent-signer-java/tarball/v2.1.0",
+  "zipball_url": "https://api.github.com/repos/mersel-dss/mersel-dss-agent-signer-java/zipball/v2.1.0",
+  "body": "## Yenilikler\n\n- Otomatik güncelleme mekanizması\n- Scalar UI\n- Splash + tray\n"
+}
