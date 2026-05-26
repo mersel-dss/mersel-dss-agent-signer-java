@@ -88,8 +88,16 @@ mersel:
     # ----------------------------------------------------------------------
     # Uygulama hazır olduğunda arka plan thread'inde GitHub API'sini çağırır,
     # `tag_name` (vX.Y.Z) → mevcut sürüm karşılaştırması yapar. Yeni sürüm
-    # varsa system tray menüsüne "Yeni sürüm v… — indir" öğesi ve bildirim
-    # eklenir. REST üzerinden `/update/status` ile sorgulanabilir.
+    # bulunduğunda:
+    #   1) Ana pencere yeşil "Servis Hazır" yerine kırmızı/turuncu
+    #      "Güncelleme Gerekli" kartına geçer ve büyük bir "İndir" butonu
+    #      sunar.
+    #   2) `mandatory: true` ise imzalama endpoint'leri (`/pades/**`,
+    #      `/xades/**`, `/smartcard/**`, `/gib/**`) HTTP 426 Upgrade
+    #      Required + `ErrorModel` JSON döner; `/update/**`, `/actuator/**`
+    #      ve Scalar UI açık kalır.
+    #   3) System tray'e dinamik "indir" menü öğesi ve balloon bildirimi
+    #      eklenir (pencere minimize edilmiş kullanıcılar için).
     #
     # GitHub Releases tagging sözleşmesi: `vMAJOR.MINOR.PATCH` ve yayınlanan
     # release'e executable jar (`mersel-dss-agent-signer-api-X.Y.Z.jar`)
@@ -104,6 +112,13 @@ mersel:
       http-timeout-ms: ${MERSEL_AGENT_UPDATE_TIMEOUT_MS:5000}
       asset-name-pattern: ${MERSEL_AGENT_UPDATE_ASSET_PATTERN:mersel-dss-agent-signer-api-.*\.jar}
       prerelease-allowed: ${MERSEL_AGENT_UPDATE_PRERELEASE:false}
+      # Zorunlu güncelleme modu — default açık. Kapatmak yalnız development
+      # sırasında önerilir (yeni sürüm yayınlanırken canlı kullanıcıları
+      # bloklamak istemiyorsanız).
+      mandatory: ${MERSEL_AGENT_UPDATE_MANDATORY:true}
+      # Periyodik recheck aralığı (dakika). 0 veya negatif değer scheduler'ı
+      # kapatır (yalnız startup + manuel `POST /update/check`).
+      recheck-interval-minutes: ${MERSEL_AGENT_UPDATE_RECHECK_MINUTES:360}
 
     # ----------------------------------------------------------------------
     # Sertifika zinciri tamamlama (AIA = Authority Information Access)

@@ -51,18 +51,28 @@ public class UpdateService {
   private final SignerProperties properties;
   private final VersionProvider versionProvider;
   private final GitHubReleaseClient releaseClient;
+  private final UpdateGate gate;
 
   public UpdateService(
       SignerProperties properties,
       VersionProvider versionProvider,
-      GitHubReleaseClient releaseClient) {
+      GitHubReleaseClient releaseClient,
+      UpdateGate gate) {
     this.properties = properties;
     this.versionProvider = versionProvider;
     this.releaseClient = releaseClient;
+    this.gate = gate;
   }
 
   /**
    * Şu anki güncelleme durumunu döner. Asla {@code null} dönmez.
+   *
+   * <p>Yeni sürüm bulunduğunda {@link UpdateGate#publish(UpdateInfo)} ile gate açılır; mandatory
+   * mod'da bu çağrı interceptor'ı aktive eder ve ana pencereyi kırmızı "Güncelleme Gerekli" kartına
+   * geçirir. {@link #checkForUpdate} {@code Optional.empty()} döndüğünde gate'e ASLA dokunulmaz —
+   * "no update" ile "HTTP fetch failed" durumları aynı sinyali verdiği için yanlış reset riski
+   * kabul edilemez. Gate temizliği daemon JVM'in restart'ına bırakılır (yeni sürümle ayaklanan
+   * daemon zaten gate boş başlar).
    *
    * @param forceRefresh {@code true} ise ETag/304 cache bypass edilir.
    */
@@ -75,7 +85,9 @@ public class UpdateService {
 
     Optional<UpdateInfo> available = checkForUpdate(forceRefresh);
     if (available.isPresent()) {
-      return available.get();
+      UpdateInfo info = available.get();
+      gate.publish(info);
+      return info;
     }
     String safe = current.isPresent() ? current.get().toString() : currentRaw;
     return UpdateInfo.upToDate(safe);

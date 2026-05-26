@@ -26,6 +26,8 @@
  */
 package io.mersel.dss.agent.api.ui;
 
+import io.mersel.dss.agent.api.services.update.UpdateInfo;
+
 /**
  * {@link MainWindow} için {@link SplashLifecycle} ile aynı pattern'i izleyen statik holder. Tray
  * menüsünden "Pencereyi Aç" gibi global eylemler buradan gerçek pencereye köprülenir; çoklu
@@ -37,6 +39,8 @@ package io.mersel.dss.agent.api.ui;
 public final class MainWindowLifecycle {
 
   private static MainWindow current;
+  // Pencere henüz açılmadıysa biriken son update state'i. Pencere açıldığında apply edilir.
+  private static UpdateInfo pendingUpdate;
 
   private MainWindowLifecycle() {}
 
@@ -53,6 +57,11 @@ public final class MainWindowLifecycle {
     MainWindow window = new MainWindow(version, openUrl, healthUrl, onExitRequest);
     window.show();
     current = window;
+    // Pencere kalkmadan önce gelen update sinyali varsa burada apply et — DesktopUiBootstrap
+    // listener'ını show()'dan önce de set'leyebilir; race-safe single point of truth.
+    if (pendingUpdate != null) {
+      window.applyUpdateState(pendingUpdate);
+    }
   }
 
   /** Pencere açıksa ön plana alır; kapalıysa no-op. */
@@ -71,6 +80,20 @@ public final class MainWindowLifecycle {
     MainWindow w = current;
     current = null;
     w.shutdownWithoutPrompt();
+  }
+
+  /**
+   * Güncelleme durumunu pencereye bildirir. Pencere henüz açılmamışsa state ileride apply
+   * edilebilsin diye saklanır (cold-boot race koruması: {@code DesktopUiBootstrap} update check'ini
+   * pencere açıldıktan ÖNCE bitirebilir).
+   *
+   * @param info Yeni güncelleme bilgisi; {@code null} → "Güncelleme Gerekli" durumu kalkar.
+   */
+  public static synchronized void applyUpdateState(UpdateInfo info) {
+    pendingUpdate = info;
+    if (current != null) {
+      current.applyUpdateState(info);
+    }
   }
 
   /** Sadece pencereyi kapatır (uygulamayı sonlandırmaz). Idempotent. */

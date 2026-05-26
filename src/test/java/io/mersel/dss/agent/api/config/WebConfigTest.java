@@ -55,7 +55,8 @@ class WebConfigTest {
     VersionProvider versionProvider = mock(VersionProvider.class);
     when(versionProvider.currentVersion()).thenReturn("9.9.9-test");
 
-    WebConfig webConfig = new WebConfig("", versionProvider);
+    WebConfig webConfig =
+        new WebConfig("", versionProvider, mock(MandatoryUpdateInterceptor.class));
     OpenAPI openApi = webConfig.merselSignerOpenApi();
 
     assertThat(openApi.getInfo()).isNotNull();
@@ -71,7 +72,8 @@ class WebConfigTest {
     VersionProvider versionProvider = mock(VersionProvider.class);
     when(versionProvider.currentVersion()).thenReturn("3.1.4-rc.7");
 
-    WebConfig webConfig = new WebConfig("", versionProvider);
+    WebConfig webConfig =
+        new WebConfig("", versionProvider, mock(MandatoryUpdateInterceptor.class));
     OpenAPI openApi = webConfig.merselSignerOpenApi();
 
     assertThat(openApi.getInfo().getVersion()).isEqualTo("3.1.4-rc.7");

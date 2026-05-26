@@ -36,6 +36,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import io.mersel.dss.agent.api.services.update.VersionProvider;
@@ -73,12 +74,24 @@ public class WebConfig implements WebMvcConfigurer {
 
   private final List<String> allowedOriginPatterns;
   private final VersionProvider versionProvider;
+  private final MandatoryUpdateInterceptor mandatoryUpdateInterceptor;
 
   public WebConfig(
       @Value("${mersel.signer.cors-allowed-origins:}") String allowedOriginsCsv,
-      VersionProvider versionProvider) {
+      VersionProvider versionProvider,
+      MandatoryUpdateInterceptor mandatoryUpdateInterceptor) {
     this.allowedOriginPatterns = parsePatterns(allowedOriginsCsv);
     this.versionProvider = versionProvider;
+    this.mandatoryUpdateInterceptor = mandatoryUpdateInterceptor;
+  }
+
+  @Override
+  public void addInterceptors(InterceptorRegistry registry) {
+    // Interceptor kendi içinde allowlist match yapıyor; ek olarak burada `addPathPatterns("/**")`
+    // ile tüm path'leri kapsıyoruz. Spotless veya readability açısından allowlist'i hem
+    // interceptor'ın preHandle içinde hem burada {@code excludePathPatterns} olarak duplicate
+    // ETMİYORUZ — tek truth-source interceptor sınıfı. Aksi halde iki yer arasında drift olur.
+    registry.addInterceptor(mandatoryUpdateInterceptor).addPathPatterns("/**");
   }
 
   @Override

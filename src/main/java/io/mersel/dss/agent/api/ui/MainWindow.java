@@ -71,6 +71,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 
+import io.mersel.dss.agent.api.services.update.UpdateInfo;
+
 /**
  * Splash kapandıktan sonra gösterilen hafif STATUS paneli. Pencere bir "iş yapma yeri" değil; tek
  * görevi kullanıcıya servisin arka planda çalıştığını ve asıl imzalama akışına (tarayıcı uzantısı
@@ -126,6 +128,15 @@ public final class MainWindow {
   private static final Color BUTTON_BG = new Color(241, 245, 249); // slate-100
   private static final Color DANGER = new Color(220, 38, 38); // red-600
   private static final Color DANGER_SOFT = new Color(254, 226, 226); // red-100
+  // Update-required kart paleti — amber/orange (uyarı, blok değil). Kullanıcı "kapatmam lazım"
+  // değil "bir aksiyon almam lazım" diye okusun.
+  private static final Color WARN_BG = new Color(255, 247, 237); // orange-50
+  private static final Color WARN_BORDER = new Color(254, 215, 170); // orange-200
+  private static final Color WARN_ACCENT = new Color(234, 88, 12); // orange-600
+  private static final Color WARN_ACCENT_GLOW = new Color(234, 88, 12, 50);
+  private static final Color WARN_BUTTON_BG = new Color(234, 88, 12); // orange-600
+  private static final Color WARN_BUTTON_HOVER = new Color(194, 65, 12); // orange-700
+  private static final Color WARN_HEADLINE = new Color(124, 45, 18); // orange-900
 
   private final String version;
   private final String openUrl;
@@ -133,6 +144,12 @@ public final class MainWindow {
   private final Runnable onExitRequest;
 
   private JFrame frame;
+  // Center panel'in container'ı + içeriği — applyUpdateState çağrıldığında center temizlenip
+  // yeniden render edilir. {@code volatile} değil çünkü tüm yazımlar EDT'de.
+  private JPanel centerContainer;
+  // En son uygulanan update bilgisi; null ise "Servis Hazır", değilse "Güncelleme Gerekli".
+  // Pencere ilk kurulduğunda gate'den okunmuyor — DesktopUiBootstrap listener üzerinden push eder.
+  private UpdateInfo pendingUpdate;
 
   public MainWindow(String version, String openUrl, String healthUrl, Runnable onExitRequest) {
     this.version = safe(version);
@@ -234,7 +251,11 @@ public final class MainWindow {
     root.setBorder(BorderFactory.createLineBorder(BORDER_STRONG, 1));
 
     root.add(buildHeader(), BorderLayout.NORTH);
-    root.add(buildCenter(), BorderLayout.CENTER);
+    centerContainer = new JPanel(new BorderLayout());
+    centerContainer.setOpaque(true);
+    centerContainer.setBackground(BG);
+    centerContainer.add(buildCenter(), BorderLayout.CENTER);
+    root.add(centerContainer, BorderLayout.CENTER);
     root.add(buildFooter(), BorderLayout.SOUTH);
 
     frame.setContentPane(root);
@@ -283,10 +304,22 @@ public final class MainWindow {
   }
 
   /**
+   * Center panel dispatcher. {@link #pendingUpdate} doluysa "Güncelleme Gerekli" kartı; aksi halde
+   * standart "Servis Hazır" kartı render edilir. Her iki branch'te de altta geliştirici araçları
+   * row'u yer alır.
+   */
+  private JPanel buildCenter() {
+    if (pendingUpdate != null) {
+      return buildUpdateRequiredCenter(pendingUpdate);
+    }
+    return buildReadyCenter();
+  }
+
+  /**
    * Pencerenin ana mesajını taşıyan hero status card. Kullanıcıya tek bir net cümle: "servis
    * çalışıyor, asıl iş tarayıcıda/uygulamada".
    */
-  private JPanel buildCenter() {
+  private JPanel buildReadyCenter() {
     JPanel center = new JPanel();
     center.setBackground(BG);
     center.setOpaque(true);
@@ -357,6 +390,123 @@ public final class MainWindow {
     center.add(buildDeveloperToolsRow());
 
     return center;
+  }
+
+  /**
+   * Zorunlu güncelleme aktif olduğunda gösterilen kart. Yeşil "Servis Hazır" yerine geçer; turuncu
+   * tema + büyük "İndir" CTA + sürüm notları link butonu. Mandatory mod'da olduğumuzda interceptor
+   * REST endpoint'lerini bloklar; bu kart kullanıcıya o blokun NEDENİNİ ve çözüm yolunu gösterir.
+   *
+   * <p>Card altında geliştirici araçları row'u yine yer alır — kullanıcı API doc / sağlık
+   * endpoint'lerine erişebilir (bu endpoint'ler interceptor allowlist'inde).
+   */
+  private JPanel buildUpdateRequiredCenter(UpdateInfo info) {
+    JPanel center = new JPanel();
+    center.setBackground(BG);
+    center.setOpaque(true);
+    center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+    center.setBorder(BorderFactory.createEmptyBorder(28, CONTENT_PADDING_X, 16, CONTENT_PADDING_X));
+
+    JPanel card = new JPanel();
+    card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+    card.setBackground(WARN_BG);
+    card.setOpaque(true);
+    card.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(WARN_BORDER, 1),
+            BorderFactory.createEmptyBorder(24, CARD_PADDING_X, 24, CARD_PADDING_X)));
+    card.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+    JPanel headlineRow = new JPanel();
+    headlineRow.setOpaque(false);
+    headlineRow.setLayout(new BoxLayout(headlineRow, BoxLayout.X_AXIS));
+    headlineRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+    headlineRow.add(new StatusDot(WARN_ACCENT, WARN_ACCENT_GLOW, STATUS_DOT_DIAMETER));
+    headlineRow.add(Box.createHorizontalStrut(12));
+    JLabel headline = new JLabel("Güncelleme Gerekli");
+    headline.setForeground(WARN_HEADLINE);
+    headline.setFont(deriveFont(Font.BOLD, 22f));
+    headlineRow.add(headline);
+    headlineRow.add(Box.createHorizontalGlue());
+    card.add(headlineRow);
+    card.add(Box.createVerticalStrut(14));
+
+    int htmlBodyWidth = WIDTH - 2 - (2 * CONTENT_PADDING_X) - (2 * CARD_PADDING_X) - 30;
+    String latestVersion = safe(info.getLatestVersion());
+    String currentVersion = safe(info.getCurrentVersion());
+    JLabel guidance =
+        new JLabel(
+            "<html><body style=\"width: "
+                + htmlBodyWidth
+                + "px; line-height: 1.5;\">"
+                + "Yeni sürüm <b>v"
+                + latestVersion
+                + "</b> yayınlandı (kullanılan: v"
+                + currentVersion
+                + "). Güvenlik ve uyumluluk gereği <b>imzalama servisi yeni sürüm "
+                + "kurulana kadar yeni istek kabul etmez</b>."
+                + "<br/><br/>"
+                + "Aşağıdaki <b>İndir</b> butonu ile yeni sürümü indirin, mevcut uygulamayı "
+                + "kapatıp yenisini başlatın."
+                + "</body></html>");
+    guidance.setForeground(TEXT_PRIMARY);
+    guidance.setFont(deriveFont(Font.PLAIN, 13f));
+    guidance.setAlignmentX(Component.LEFT_ALIGNMENT);
+    card.add(guidance);
+    card.add(Box.createVerticalStrut(18));
+
+    JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+    actionRow.setOpaque(false);
+    actionRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+    final String downloadUrl =
+        (info.getDownloadUrl() != null && !info.getDownloadUrl().isEmpty())
+            ? info.getDownloadUrl()
+            : info.getReleaseUrl();
+    JButton downloadButton = primaryWarnButton("İndir v" + latestVersion);
+    downloadButton.addActionListener(e -> openInBrowser(downloadUrl));
+    actionRow.add(downloadButton);
+
+    if (info.getReleaseUrl() != null && !info.getReleaseUrl().isEmpty()) {
+      JButton notesButton = linkButton("Sürüm notları");
+      notesButton.addActionListener(e -> openInBrowser(info.getReleaseUrl()));
+      actionRow.add(notesButton);
+    }
+
+    card.add(actionRow);
+
+    center.add(card);
+    center.add(Box.createVerticalStrut(20));
+    center.add(buildDeveloperToolsRow());
+    return center;
+  }
+
+  /**
+   * UI thread'inden bağımsız çağrılabilen state setter. EDT üzerinde center container'ı temizleyip
+   * yeni durumla yeniden render eder. {@code null} → "Servis Hazır" durumuna geri dön (test ve
+   * gelecekteki "güncelleme tamamlandı" akışı için). Headless / pencere kapalı durumlarda no-op.
+   */
+  public void applyUpdateState(UpdateInfo info) {
+    if (GraphicsEnvironment.isHeadless()) {
+      return;
+    }
+    Runnable op =
+        () -> {
+          this.pendingUpdate = info;
+          if (frame == null || centerContainer == null) {
+            return;
+          }
+          centerContainer.removeAll();
+          centerContainer.add(buildCenter(), BorderLayout.CENTER);
+          centerContainer.revalidate();
+          centerContainer.repaint();
+          frame.pack();
+        };
+    if (SwingUtilities.isEventDispatchThread()) {
+      op.run();
+    } else {
+      SwingUtilities.invokeLater(op);
+    }
   }
 
   /**
@@ -513,6 +663,41 @@ public final class MainWindow {
     b.setFont(deriveFont(Font.BOLD, 11f));
     b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     b.setOpaque(true);
+    return b;
+  }
+
+  /**
+   * Zorunlu güncelleme kartı için birincil CTA — dolgu turuncu, beyaz metin. Hover'da bir ton koyu.
+   * Standart "link butonu" stilinden ayrılır çünkü tıklanması gerekiyor: eylem hiyerarşisinde EN
+   * ÜSTTE.
+   */
+  private JButton primaryWarnButton(String text) {
+    final JButton b = new JButton(text);
+    b.setBackground(WARN_BUTTON_BG);
+    b.setForeground(Color.WHITE);
+    b.setFocusPainted(false);
+    b.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(WARN_ACCENT, 1),
+            BorderFactory.createEmptyBorder(9, 22, 9, 22)));
+    b.setFont(deriveFont(Font.BOLD, 13f));
+    b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    b.setOpaque(true);
+    // contentAreaFilled=false olmadan bazı LAF'larda (macOS Aqua) setBackground çalışmaz; explicit
+    // kontrol için kapatıyoruz ve setOpaque(true) ile arka plan çizimini biz garantiliyoruz.
+    b.setContentAreaFilled(true);
+    b.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseEntered(MouseEvent e) {
+            b.setBackground(WARN_BUTTON_HOVER);
+          }
+
+          @Override
+          public void mouseExited(MouseEvent e) {
+            b.setBackground(WARN_BUTTON_BG);
+          }
+        });
     return b;
   }
 

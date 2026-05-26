@@ -27,7 +27,11 @@
 package io.mersel.dss.agent.api.ui;
 
 import java.awt.GraphicsEnvironment;
-import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import javax.annotation.PreDestroy;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +42,7 @@ import org.springframework.stereotype.Component;
 
 import io.mersel.dss.agent.api.SignerApplication;
 import io.mersel.dss.agent.api.config.SignerProperties;
+import io.mersel.dss.agent.api.services.update.UpdateGate;
 import io.mersel.dss.agent.api.services.update.UpdateInfo;
 import io.mersel.dss.agent.api.services.update.UpdateService;
 
@@ -64,20 +69,24 @@ public class DesktopUiBootstrap {
 
   private final SignerProperties properties;
   private final UpdateService updateService;
+  private final UpdateGate updateGate;
   private final int serverPort;
   private final String serverAddress;
   private final String contextPath;
 
   private volatile SystemTrayManager trayManager;
+  private volatile ScheduledExecutorService updateScheduler;
 
   public DesktopUiBootstrap(
       SignerProperties properties,
       UpdateService updateService,
+      UpdateGate updateGate,
       @Value("${server.port:15211}") int serverPort,
       @Value("${server.address:127.0.0.1}") String serverAddress,
       @Value("${server.servlet.context-path:/}") String contextPath) {
     this.properties = properties;
     this.updateService = updateService;
+    this.updateGate = updateGate;
     this.serverPort = serverPort;
     this.serverAddress = serverAddress;
     this.contextPath = contextPath;
@@ -93,8 +102,23 @@ public class DesktopUiBootstrap {
     if (shouldInstallTray()) {
       installTray(windowOpened);
     }
+    // UpdateGate listener'ı: gate state değiştiğinde ana pencere otomatik yeşil → turuncu kart'a
+    // veya tersine geçer. Listener pencere açılmasa bile install edilir; pencere açıldığında
+    // pendingUpdate üzerinden son state apply edilir.
+    updateGate.setListener(MainWindowLifecycle::applyUpdateState);
     if (properties.getUpdate().isCheckOnStartup()) {
       runUpdateCheckInBackground();
+    }
+    scheduleRecheckIfConfigured();
+  }
+
+  /** Scheduler clean-up — Spring context shutdown'da thread'leri sızdırma. */
+  @PreDestroy
+  public void shutdown() {
+    ScheduledExecutorService sched = this.updateScheduler;
+    if (sched != null) {
+      sched.shutdownNow();
+      this.updateScheduler = null;
     }
   }
 
@@ -226,32 +250,60 @@ public class DesktopUiBootstrap {
   /* ---------------- update ---------------- */
 
   private void runUpdateCheckInBackground() {
-    Thread t =
-        new Thread(
-            () -> {
-              try {
-                Optional<UpdateInfo> result = updateService.checkForUpdate(false);
-                if (result.isPresent()) {
-                  UpdateInfo info = result.get();
-                  LOG.info(
-                      "Yeni sürüm bulundu: {} → {} ({})",
-                      info.getCurrentVersion(),
-                      info.getLatestVersion(),
-                      info.getDownloadUrl());
-                  SystemTrayManager mgr = this.trayManager;
-                  if (mgr != null) {
-                    mgr.notifyUpdateAvailable(info.getLatestVersion(), info.getDownloadUrl());
-                  }
-                } else {
-                  LOG.debug("Güncelleme kontrolü: yeni sürüm yok ya da kontrol başarısız.");
-                }
-              } catch (RuntimeException re) {
-                LOG.debug("Güncelleme kontrolü background thread'inde hata: {}", re.getMessage());
-              }
-            },
-            "mersel-update-check");
+    Thread t = new Thread(this::performUpdateCheck, "mersel-update-check");
     t.setDaemon(true);
     t.start();
+  }
+
+  /**
+   * UpdateService.currentStatus() çağrısı UpdateGate'i besler — gate de listener üzerinden ana
+   * pencereyi günceller. Burada ek olarak tray balloon bildirimi tetikliyoruz (pencere minimize
+   * edilmişse / kullanıcı tray'i izliyorsa kanıt olsun).
+   */
+  private void performUpdateCheck() {
+    try {
+      UpdateInfo status = updateService.currentStatus(true);
+      if (status != null && status.isUpdateAvailable()) {
+        LOG.info(
+            "Yeni sürüm bulundu: {} → {} ({})",
+            status.getCurrentVersion(),
+            status.getLatestVersion(),
+            status.getDownloadUrl());
+        SystemTrayManager mgr = this.trayManager;
+        if (mgr != null) {
+          mgr.notifyUpdateAvailable(status.getLatestVersion(), status.getDownloadUrl());
+        }
+      } else {
+        LOG.debug("Güncelleme kontrolü: yeni sürüm yok ya da kontrol başarısız.");
+      }
+    } catch (RuntimeException re) {
+      LOG.debug("Güncelleme kontrolü background thread'inde hata: {}", re.getMessage());
+    }
+  }
+
+  /**
+   * Kullanıcı daemon'u günlerce açık tutabilir; tek seferlik startup check yetmez. {@code
+   * recheck-interval-minutes} dakikada bir recheck yapan tek-thread'lik daemon scheduler kurar.
+   * Negatif veya 0 değer scheduler'ı kapatır.
+   */
+  private void scheduleRecheckIfConfigured() {
+    int minutes = properties.getUpdate().getRecheckIntervalMinutes();
+    if (!properties.getUpdate().isEnabled() || minutes <= 0) {
+      LOG.debug("Periyodik güncelleme recheck devre dışı.");
+      return;
+    }
+    ScheduledExecutorService sched =
+        Executors.newSingleThreadScheduledExecutor(
+            r -> {
+              Thread t = new Thread(r, "mersel-update-recheck");
+              t.setDaemon(true);
+              return t;
+            });
+    long intervalMs = TimeUnit.MINUTES.toMillis(minutes);
+    sched.scheduleAtFixedRate(
+        this::performUpdateCheck, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
+    this.updateScheduler = sched;
+    LOG.info("Periyodik güncelleme recheck planlandı: her {} dakikada bir.", minutes);
   }
 
   /** Test/diagnostic için tray manager'a erişim (paket-içi). */

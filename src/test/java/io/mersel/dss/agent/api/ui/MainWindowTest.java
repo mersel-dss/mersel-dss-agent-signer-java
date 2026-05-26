@@ -34,6 +34,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import io.mersel.dss.agent.api.services.update.UpdateInfo;
+
 /**
  * Headless ortamda {@link MainWindow}'un patlamadan çalıştığını ve idempotency invariant'larını
  * doğrular. Surefire argLine'ı {@code -Djava.awt.headless=true} set ettiği için tüm UI işlemleri
@@ -91,5 +93,18 @@ class MainWindowTest {
     // safe(null) -> "0.0.0"; UI render'lansaydı footer'da "v0.0.0" görünecekti. Sadece ctor
     // exception atmamalı.
     assertDoesNotThrow(() -> new MainWindow(null, null, null, null));
+  }
+
+  @Test
+  void applyUpdateStateIsSafeInHeadless() {
+    // applyUpdateState pencere kurulmadan ya da headless ortamda çağrılırsa sessizce no-op olmalı.
+    // Bu, DesktopUiBootstrap listener'ının pencere açılmadan da çağrılabilmesini koruma altına
+    // alır.
+    MainWindow window = new MainWindow("1.0.0", "u", "h", () -> {});
+    UpdateInfo info =
+        UpdateInfo.available(
+            "1.0.0", "1.0.1", "v1.0.1", "https://example/release", "https://example/jar", "", "");
+    assertDoesNotThrow(() -> window.applyUpdateState(info));
+    assertDoesNotThrow(() -> window.applyUpdateState(null));
   }
 }

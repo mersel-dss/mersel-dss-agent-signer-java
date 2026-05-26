@@ -228,6 +228,30 @@ public class SignerProperties {
      */
     private boolean prereleaseAllowed = false;
 
+    /**
+     * Yeni sürüm bulunduğunda eski sürümü "zorunlu güncelleme" moduna sokar:
+     *
+     * <ul>
+     *   <li>Ana pencere "Servis Hazır" yerine kırmızı "Güncelleme Gerekli" kartı + <em>İndir</em>
+     *       butonunu render eder.
+     *   <li>İmzalama endpoint'leri (`/pades/**`, `/xades/**`, `/smartcard/**`, `/gib/**`) HTTP 426
+     *       <em>Upgrade Required</em> + indirme URL'i taşıyan {@code ErrorModel} döner. {@code
+     *       /update/**}, {@code /actuator/**}, Scalar UI ve {@code /v3/api-docs} açık kalır
+     *       (kullanıcı yine de durumu sorgulayabilsin).
+     * </ul>
+     *
+     * <p>{@code false} → eski davranış: yalnız tray balloon + UI bilgi banner'ı, REST endpoint'leri
+     * çalışır. Yerelde test ederken kapatmak için kullanışlı.
+     */
+    private boolean mandatory = true;
+
+    /**
+     * Daemon ayakta kaldığı süre boyunca periyodik recheck aralığı (dakika). Kullanıcı bilgisayarı
+     * günlerce kapatmaz; yayınladıktan sonra "kabul ortalama gecikme" budur. {@code 0} ya da
+     * negatif değer scheduler'ı kapatır (yalnız startup check + manuel {@code POST /update/check}).
+     */
+    private int recheckIntervalMinutes = 360;
+
     public boolean isEnabled() {
       return enabled;
     }
@@ -282,6 +306,22 @@ public class SignerProperties {
 
     public void setPrereleaseAllowed(boolean prereleaseAllowed) {
       this.prereleaseAllowed = prereleaseAllowed;
+    }
+
+    public boolean isMandatory() {
+      return mandatory;
+    }
+
+    public void setMandatory(boolean mandatory) {
+      this.mandatory = mandatory;
+    }
+
+    public int getRecheckIntervalMinutes() {
+      return recheckIntervalMinutes;
+    }
+
+    public void setRecheckIntervalMinutes(int recheckIntervalMinutes) {
+      this.recheckIntervalMinutes = recheckIntervalMinutes;
     }
   }
 

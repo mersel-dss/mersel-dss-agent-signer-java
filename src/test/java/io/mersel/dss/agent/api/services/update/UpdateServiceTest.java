@@ -51,7 +51,7 @@ class UpdateServiceTest {
     props = new SignerProperties();
     versionProvider = mock(VersionProvider.class);
     releaseClient = mock(GitHubReleaseClient.class);
-    service = new UpdateService(props, versionProvider, releaseClient);
+    service = new UpdateService(props, versionProvider, releaseClient, new UpdateGate(props));
   }
 
   @Test

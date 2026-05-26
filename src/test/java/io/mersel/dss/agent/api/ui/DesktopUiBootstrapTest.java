@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 
 import io.mersel.dss.agent.api.config.SignerProperties;
+import io.mersel.dss.agent.api.services.update.UpdateGate;
 import io.mersel.dss.agent.api.services.update.UpdateService;
 
 /**
@@ -77,11 +78,16 @@ class DesktopUiBootstrapTest {
     // adımları sessizce no-op olmalı, exception atmamalı.
     UpdateService updateService = mock(UpdateService.class);
     when(updateService.checkForUpdate(false)).thenReturn(java.util.Optional.empty());
+    // Recheck scheduler thread sızdırmayalım — yalnız bu test için kapat.
+    props.getUpdate().setRecheckIntervalMinutes(0);
+    UpdateGate gate = new UpdateGate(props);
 
-    DesktopUiBootstrap boot = new DesktopUiBootstrap(props, updateService, 15211, "127.0.0.1", "/");
+    DesktopUiBootstrap boot =
+        new DesktopUiBootstrap(props, updateService, gate, 15211, "127.0.0.1", "/");
 
     ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
     assertDoesNotThrow(() -> boot.onApplicationReady(event));
+    boot.shutdown();
   }
 
   @Test
@@ -89,13 +95,17 @@ class DesktopUiBootstrapTest {
     SignerProperties props = new SignerProperties();
     props.getUi().setEnabled(false);
     props.getUpdate().setCheckOnStartup(false);
+    props.getUpdate().setRecheckIntervalMinutes(0);
 
     UpdateService updateService = mock(UpdateService.class);
-    DesktopUiBootstrap boot = new DesktopUiBootstrap(props, updateService, 15211, "127.0.0.1", "/");
+    UpdateGate gate = new UpdateGate(props);
+    DesktopUiBootstrap boot =
+        new DesktopUiBootstrap(props, updateService, gate, 15211, "127.0.0.1", "/");
 
     ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
     assertDoesNotThrow(() -> boot.onApplicationReady(event));
     assertThat(boot.getTrayManagerForTest()).isNull();
     assertThat(MainWindowLifecycle.isShowing()).isFalse();
+    boot.shutdown();
   }
 }
