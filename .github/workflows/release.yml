@@ -72,13 +72,13 @@ jobs:
           echo "Release tag: $TAG (version: $VERSION)"
 
       - name: Checkout (tagged ref)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ steps.tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up JDK 8
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '8'
