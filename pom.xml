@@ -80,7 +80,7 @@
     <springdoc.version>1.8.0</springdoc.version>
     <json.version>20260522</json.version>
     <commons-io.version>2.22.0</commons-io.version>
-    <commons-lang3.version>3.12.0</commons-lang3.version>
+    <commons-lang3.version>3.20.0</commons-lang3.version>
     <okhttp.version>4.12.0</okhttp.version>
 
     <!-- Build plugin versions -->
