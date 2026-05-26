@@ -297,19 +297,36 @@ if [[ $CHANGELOG_ALREADY_FINALIZED -eq 0 ]]; then
             s|^## \[Unreleased\][^\n]*\n|## [Unreleased]\n\n## [$ver] — $today\n|m;
         ' "$CHANGELOG"
 
-        # (b) Dosya sonundaki compare/release link'lerini güncelle:
-        #     [Unreleased]: .../compare/vCUR...HEAD   →   .../compare/vNEW...HEAD
-        #     [NEW]:        .../compare/vCUR...vNEW   (eklenir, eğer yoksa)
+        # (b) Dosya sonundaki compare/release link'lerini guncelle:
+        #     [Unreleased]: ...                       -> .../compare/vNEW...HEAD
+        #     Onceki versiyon LINK olarak varsa       -> [NEW]: .../compare/vCUR...vNEW
+        #     Onceki versiyon LINK olarak yoksa       -> [NEW]: .../releases/tag/vNEW   (ilk release)
         CUR_VER="$CURRENT_VERSION" NEW_VER="$TARGET_VERSION" REPO="$REPO_SLUG" perl -i -0777 -pe '
             my $cur  = $ENV{CUR_VER};
             my $new  = $ENV{NEW_VER};
             my $repo = $ENV{REPO};
-            # Unreleased compare URL baseline yeni surume cek.
-            s|^\[Unreleased\]:\s*\Qhttps://github.com/$repo/compare/v$cur...HEAD\E|[Unreleased]: https://github.com/$repo/compare/v$new...HEAD|m;
-            # Yeni release link satiri; Unreleased satirinin hemen altina ekle.
-            # Halihazirda varsa eklenmesin (idempotent).
+            my $has_prior = ($cur ne $new) && /^\[\Q$cur\E\]:\s/m;
+            my $target_link;
+            if ($has_prior) {
+                $target_link = "[$new]: https://github.com/$repo/compare/v$cur...v$new";
+            } else {
+                # Ilk release veya onceki versiyon CHANGELOG link bloğunda yok
+                $target_link = "[$new]: https://github.com/$repo/releases/tag/v$new";
+            }
+            # Unreleased link satirini varsa her formattan compare/vNEW...HEAD a cek.
+            if (/^\[Unreleased\]:[^\n]*/m) {
+                s|^\[Unreleased\]:[^\n]*|[Unreleased]: https://github.com/$repo/compare/v$new...HEAD|m;
+            } else {
+                # Unreleased link yoksa dosya sonuna iki link birden ekle.
+                $_ .= "\n[Unreleased]: https://github.com/$repo/compare/v$new...HEAD\n";
+            }
+            # Yeni release link satiri - idempotent ekleme.
             if (!/^\[\Q$new\E\]:/m) {
-                s|^(\[Unreleased\]: [^\n]+\n)|$1\[$new\]: https://github.com/$repo/compare/v$cur...v$new\n|m;
+                if (/^(\[Unreleased\]:[^\n]+\n)/m) {
+                    s|^(\[Unreleased\]:[^\n]+\n)|$1$target_link\n|m;
+                } else {
+                    $_ .= "$target_link\n";
+                }
             }
         ' "$CHANGELOG"
         ok "CHANGELOG.md finalize edildi + compare link'leri güncellendi."

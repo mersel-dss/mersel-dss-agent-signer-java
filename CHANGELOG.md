@@ -6,16 +6,9 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
-_Henüz yayınlanmamış değişiklik yok. SemVer kuralı: BREAKING değişiklikleri
-`### Changed` altında "**(BREAKING — wire / Java contract)**" başlığıyla işaretle,
-release sırasında `[Unreleased]` başlığı `[X.Y.Z] — YYYY-MM-DD` olarak yeniden
-adlandırılıp boş Unreleased tekrar eklenir._
-
-## [3.0.0] — 2026-05-26
-
-Public sözleşme (REST wire + dahili `services.*` Java imzaları) çoklu BREAKING
-değişiklik aldı; SemVer kuralı gereği MAJOR bump. Frontend tüketicilerin
-güncellenmesi gereken iki ana endpoint:
+Bu ilk public release — projenin sözleşmesi (REST wire + `services.*` Java
+imzaları) bu sürümle stabilize ediliyor. Frontend tüketicilerin sözleşme
+sürümüne kilitleyebileceği iki ana endpoint:
 
 - `POST /xades/sign` — `contentType` enum değeri `HrXmlDocument` →
   `HrXmlCounterSignature` olarak yeniden adlandırıldı (mantıksal davranışı
@@ -611,10 +604,4 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-## [2.0.0] — 2026-05-19
-
-İlk açık kaynak hazırlık sürümü.
-
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v3.0.0...HEAD
-[3.0.0]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v2.0.0...v3.0.0
-[2.0.0]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v2.0.0
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/commits/main
