@@ -77,7 +77,7 @@
     <itext.version>7.2.5</itext.version>
     <itext5.version>5.5.13.3</itext5.version>
     <xades4j.version>1.7.0</xades4j.version>
-    <springdoc.version>1.7.0</springdoc.version>
+    <springdoc.version>1.8.0</springdoc.version>
     <json.version>20231013</json.version>
     <commons-io.version>2.22.0</commons-io.version>
     <commons-lang3.version>3.12.0</commons-lang3.version>
