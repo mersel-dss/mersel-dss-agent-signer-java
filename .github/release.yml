@@ -1,0 +1,70 @@
+#
+# GitHub Releases otomatik notlar yapılandırması.
+#
+# Release workflow'u (`.github/workflows/release.yml`) `generate_release_notes:
+# true` ile native GitHub release notes generator'ını tetikler. Bu dosya o
+# generator'ın hangi PR'ı hangi kategoriye düşüreceğini ve kimin contributor
+# listesinden çıkarılacağını belirler.
+#
+# **Kullanım**: PR'a aşağıdaki label'lardan en az birini ekle:
+#   - `breaking`       → sözleşme bozucu değişiklikler (REST wire / Java API)
+#   - `feature`        → yeni özellik
+#   - `enhancement`    → mevcut özelliği iyileştirme
+#   - `bug` / `fix`    → hata düzeltme
+#   - `security`       → güvenlik düzeltmesi / CVE patch
+#   - `performance`    → performans optimizasyonu
+#   - `dependencies`   → bağımlılık bump'ı (Dependabot otomatik koyar)
+#   - `documentation` → sadece doküman değişiklikleri
+#   - `chore`          → release notlarına girmeyecek housekeeping
+#
+# CHANGELOG.md ile çift kayıt: release workflow'u CHANGELOG'tan `[X.Y.Z]`
+# bölümünü manuel notlar olarak çeker; aşağıdaki kategoriler bunun **altına**
+# eklenir (`generate_release_notes: true` + `body_path:` birleşimi).
+#
+changelog:
+  exclude:
+    labels:
+      - "chore"
+      - "ignore-for-release"
+    authors:
+      - dependabot
+      - dependabot[bot]
+      - github-actions
+      - github-actions[bot]
+
+  categories:
+    - title: "⚠️ Breaking changes"
+      labels:
+        - "breaking"
+        - "breaking-change"
+
+    - title: "🚀 New features"
+      labels:
+        - "feature"
+        - "enhancement"
+
+    - title: "🐛 Bug fixes"
+      labels:
+        - "bug"
+        - "fix"
+
+    - title: "🔒 Security"
+      labels:
+        - "security"
+
+    - title: "⚡ Performance"
+      labels:
+        - "performance"
+
+    - title: "📦 Dependencies"
+      labels:
+        - "dependencies"
+
+    - title: "📝 Documentation"
+      labels:
+        - "documentation"
+        - "docs"
+
+    - title: "🧰 Other changes"
+      labels:
+        - "*"

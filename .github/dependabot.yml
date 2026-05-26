@@ -1,0 +1,107 @@
+#
+# Dependabot — Maven dependency'leri ve GitHub Actions adımları için
+# haftalık otomatik PR akışı.
+#
+# JDK 1.8 hattındayız; Spring Boot 3.x (JDK 17 zorunlu) ve BouncyCastle
+# jdk18on hattı (JDK 8 desteği kesik) major bump'ları **bilinçli olarak
+# ignore** ediyoruz. Bu kısıtlar gevşeyecekse aşağıdaki `ignore`
+# bloklarını kaldır.
+#
+# Group'lar: ekosistemleri birlikte bump'lamak için kullanılır — örn.
+# `okhttp` + `mockwebserver` her zaman aynı sürümde olmalı (test
+# fixture'ları runtime dependency ile aynı protokol katmanını çağırır);
+# tek bir PR ile bump'lanır.
+#
+version: 2
+updates:
+  # ---------------------------------------------------------------------
+  # Maven (pom.xml)
+  # ---------------------------------------------------------------------
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 8
+    labels:
+      - "dependencies"
+      - "java"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+          - "org.springframework:*"
+      bouncycastle:
+        patterns:
+          - "org.bouncycastle:*"
+      itext:
+        patterns:
+          - "com.itextpdf:*"
+      okhttp:
+        patterns:
+          - "com.squareup.okhttp3:*"
+      jackson:
+        patterns:
+          - "com.fasterxml.jackson*:*"
+      build-plugins:
+        patterns:
+          - "org.apache.maven.plugins:*"
+          - "com.diffplug.spotless:spotless-maven-plugin"
+          - "org.jacoco:jacoco-maven-plugin"
+          - "com.mycila:license-maven-plugin"
+          - "org.owasp:dependency-check-maven"
+          - "org.cyclonedx:cyclonedx-maven-plugin"
+    ignore:
+      # Spring Boot 3.x JDK 17 ister; biz JDK 1.8 hattındayız. MAJOR bump'ı
+      # ancak JDK 17 portu kararı alındığında kabul edeceğiz.
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework:*"
+        update-types: ["version-update:semver-major"]
+      # BouncyCastle `jdk15on` (JDK 1.5+) artifact'ı 1.70'te dondu;
+      # `jdk18on` (JDK 1.8+) 1.71+ hattı bizim için ayrı paket olarak gelir.
+      # Bizim GAV'larımız jdk15on; Dependabot bunlara MAJOR önermez —
+      # patch/minor güncellemeleri serbest. Yine de defensive ignore.
+      - dependency-name: "org.bouncycastle:bcprov-jdk15on"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.bouncycastle:bcpkix-jdk15on"
+        update-types: ["version-update:semver-major"]
+      # springdoc 2.x Spring Boot 3.x ile gelir; 1.x hattında kalıyoruz.
+      - dependency-name: "org.springdoc:*"
+        update-types: ["version-update:semver-major"]
+      # iText 8.x JDK 11+ ister; iText 7.x hattında kalıyoruz.
+      - dependency-name: "com.itextpdf:kernel"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.itextpdf:sign"
+        update-types: ["version-update:semver-major"]
+
+  # ---------------------------------------------------------------------
+  # GitHub Actions — workflow YAML'lerindeki action sürümleri
+  # ---------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "actions/*"
+      release-tooling:
+        patterns:
+          - "softprops/*"
+          - "github/codeql-action"

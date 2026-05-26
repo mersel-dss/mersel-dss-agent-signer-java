@@ -97,6 +97,22 @@ jobs:
           fi
           echo "pom.xml version $POM_VERSION = tag — tamam."
 
+      - name: Verify README jar reference uses X.Y.Z placeholder
+        shell: bash
+        run: |
+          # README'de "mersel-dss-agent-signer-api-<literal sürüm>.jar" sızarsa
+          # build durur. Beklenen pattern: "mersel-dss-agent-signer-api-X.Y.Z.jar"
+          # (placeholder) — release dokümanları sürüm bump'lamayı unutmayı
+          # kaldırır. Eğer canlı bir sürüm referansı vermek gerekiyorsa CHANGELOG
+          # dışında bir yerde verme.
+          BAD_REFS=$(grep -nE 'mersel-dss-agent-signer-api-[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+_-]+)?\.jar' README.md || true)
+          if [ -n "$BAD_REFS" ]; then
+            echo "::error::README.md'de hard-coded jar sürümü bulundu — X.Y.Z placeholder'ına çevir:"
+            echo "$BAD_REFS"
+            exit 1
+          fi
+          echo "README jar referansları placeholder formatında — tamam."
+
       - name: Verify Spotless formatting
         run: ./mvnw --batch-mode --no-transfer-progress spotless:check
 

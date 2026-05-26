@@ -45,7 +45,8 @@ tıkladığında:
 Terminal alternatifi (CI / sunucu / Docker için):
 
 ```bash
-java -jar mersel-dss-agent-signer-api-3.0.0.jar
+# X.Y.Z yerine GitHub Releases'ten indirdiğin sürümün adı gelir.
+java -jar mersel-dss-agent-signer-api-X.Y.Z.jar
 ```
 
 > **Önkoşul:** Java 8+ kurulu olmalı. Native installer
@@ -58,7 +59,7 @@ java -jar mersel-dss-agent-signer-api-3.0.0.jar
 
 ```bash
 # 1) Uygulamayı başlat — çift tıkla veya CLI ile.
-java -jar mersel-dss-agent-signer-api-3.0.0.jar
+java -jar mersel-dss-agent-signer-api-X.Y.Z.jar
 
 # 2) Bağlı okuyucuları ve kart tipini al.
 curl http://localhost:15211/smartcard
@@ -503,7 +504,7 @@ UI göstermesini sağlar.
 |---|---|---|
 | (default) | compile + test + fat-jar | her zaman |
 | `quality` | JaCoCo coverage (%15 baseline) + license header check | CI / PR |
-| `security` | OWASP Dependency-Check (CVSS ≥ 8 fail) + CycloneDX SBOM (`target/bom.xml` + `target/bom.json`) | CI main push + release öncesi |
+| `security` | OWASP Dependency-Check (CVSS ≥ 8 fail) + CycloneDX SBOM (`target/bom.xml` + `target/bom.json`) | opsiyonel — sürüm öncesi manuel `mvn -P security verify` |
 | `sbom` | Yalnız CycloneDX SBOM (OWASP'sız, NVD çekimi yok → hızlı); release workflow'undan çağrılır | release tag |
 
 ### Yeni sürüm yayınlamak
@@ -537,7 +538,32 @@ Workflow şunları üretir ve **DRAFT** olarak GitHub Release'e attach eder
 - `SHA256SUMS.txt` — tüm asset'lerin SHA-256 checksum'ı
 
 Workflow tag'in `pom.xml` sürümü ile eşleştiğini doğrular; eşleşmezse build
-durur (drift koruması).
+durur (drift koruması). README'de hard-coded jar sürüm referansı da
+yasaktır — `X.Y.Z` placeholder dışına çıkılırsa workflow kırar.
+
+### Prerelease (release candidate) yayınlamak
+
+Beta / RC sürümler için tag suffix'i kullan. Workflow tag'de `-` görürse
+GitHub Release'i otomatik **prerelease** olarak işaretler ve tray
+güncelleme akışı (`MERSEL_AGENT_UPDATE_PRERELEASE=false` default) bu
+release'i son kullanıcıya **göstermez** — sadece `MERSEL_AGENT_UPDATE_PRERELEASE=true`
+çalıştıranlar haberdar olur.
+
+```bash
+# RC sürüm bump'ı — pom.xml'e -SNAPSHOT yazma, RC ekini koy (kalıcı sürüm).
+./mvnw versions:set -DnewVersion=3.1.0-rc.1 -DgenerateBackupPoms=false
+
+git add pom.xml CHANGELOG.md
+git commit -m "chore: bump version to 3.1.0-rc.1"
+git push
+
+git tag -a v3.1.0-rc.1 -m "Release candidate v3.1.0-rc.1"
+git push origin v3.1.0-rc.1
+```
+
+Workflow tag regex'i kabul ettiği prerelease suffix biçimleri:
+`-rc.1`, `-beta.2`, `-alpha.3`, `-snapshot.20260601`. Final yayında ekini
+çıkarıp `3.1.0` olarak normal akışı tekrar et.
 
 ## Güvenlik notları
 
