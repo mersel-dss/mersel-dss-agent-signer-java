@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-05-26
+
 ## [1.0.1] — 2026-05-26
 
 Bu ilk public release — projenin sözleşmesi (REST wire + `services.*` Java
@@ -606,5 +608,6 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v1.0.1
