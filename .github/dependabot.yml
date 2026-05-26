@@ -79,6 +79,24 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "com.itextpdf:sign"
         update-types: ["version-update:semver-major"]
+      # xades4j 2.x → Apache Santuario 4.x + jakarta.xml.bind + BouncyCastle
+      # jdk18on. JDK 11+ zorunlu; biz JDK 1.8 hattındayız, 1.7.x'te kalıyoruz.
+      - dependency-name: "com.googlecode.xades4j:xades4j"
+        update-types: ["version-update:semver-major"]
+      # OkHttp 5.x JDK 11+ + Kotlin 2.2 runtime ister. OkHttp 4.12 JDK 8
+      # için resmi son sürüm; major bump'ı JDK 17 portuna kadar erteliyoruz.
+      - dependency-name: "com.squareup.okhttp3:*"
+        update-types: ["version-update:semver-major"]
+      # license-maven-plugin 5.x JDK 11+ (changelog: "Drop Java 8, use 11").
+      # 4.6 son Java 8 uyumlu sürüm; major bump'ı erteliyoruz.
+      - dependency-name: "com.mycila:license-maven-plugin"
+        update-types: ["version-update:semver-major"]
+      # spotless-maven-plugin 3.x JDK 11+ ister. 2.x hattında kalıyoruz.
+      - dependency-name: "com.diffplug.spotless:spotless-maven-plugin"
+        update-types: ["version-update:semver-major"]
+      # dependency-check-maven 10.x+ JDK 11+ ister. 9.x hattında kalıyoruz.
+      - dependency-name: "org.owasp:dependency-check-maven"
+        update-types: ["version-update:semver-major"]
 
   # ---------------------------------------------------------------------
   # GitHub Actions — workflow YAML'lerindeki action sürümleri
