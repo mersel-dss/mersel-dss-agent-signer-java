@@ -74,8 +74,8 @@
 
     <!-- Dependency versions -->
     <bouncycastle.version>1.70</bouncycastle.version>
-    <itext.version>7.2.5</itext.version>
-    <itext5.version>5.5.13.3</itext5.version>
+    <itext.version>7.2.6</itext.version>
+    <itext5.version>5.5.13.5</itext5.version>
     <xades4j.version>1.7.0</xades4j.version>
     <springdoc.version>1.7.0</springdoc.version>
     <json.version>20231013</json.version>
