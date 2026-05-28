@@ -11,7 +11,7 @@
 
   <groupId>io.mersel.dss</groupId>
   <artifactId>mersel-dss-agent-signer-api</artifactId>
-  <version>1.0.2</version>
+  <version>1.0.3</version>
   <packaging>jar</packaging>
   <name>mersel-dss-agent-signer-api</name>
   <description>Mersel DSS Agent — yerel PKCS#11 akıllı kart imzalama servisi
