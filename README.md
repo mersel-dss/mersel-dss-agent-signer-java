@@ -5,6 +5,16 @@
 [![Java](https://img.shields.io/badge/Java-1.8-blue.svg)](https://www.oracle.com/java/technologies/javase/javase8-archive-downloads.html)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.7-brightgreen.svg)](https://spring.io/projects/spring-boot)
 
+<!-- LATEST_RELEASE:BEGIN -->
+
+> **Son sürüm — [`v1.0.2`](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v1.0.2)** ·
+> Doğrudan indir: [`mersel-dss-agent-signer-api-1.0.2.jar`](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.2/mersel-dss-agent-signer-api-1.0.2.jar) ·
+> [SHA-256](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.2/SHA256SUMS.txt) ·
+> [SBOM](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.2/mersel-dss-agent-signer-api-1.0.2-bom.json) ·
+> [Tüm sürümler](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases)
+
+<!-- LATEST_RELEASE:END -->
+
 > Kullanıcının makinesinde çalışan, akıllı kart üzerinden **PAdES** ve
 > **XAdES** imza üreten ve **GİB e-Fatura başvurusu** gönderen yerel
 > imza uygulaması. **Tek jar dosyası — macOS, Linux ve Windows'ta aynı,

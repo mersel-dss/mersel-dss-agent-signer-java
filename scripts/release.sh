@@ -218,11 +218,22 @@ ok "Tag '${TAG}' boşta — devam ediliyor."
 # -----------------------------------------------------------------------------
 # 5. README hard-coded sürüm kontrolü (release.yml ile aynı guard, lokal)
 # -----------------------------------------------------------------------------
+#
+# `<!-- LATEST_RELEASE:BEGIN --> ... <!-- LATEST_RELEASE:END -->` blok'unun
+# İÇİ release.sh tarafından otomatik güncellenir (aşağıda step 8.5). Bu
+# blok dışındaki hard-coded jar referansları yasak — kullanıcı dökümantasyonu
+# `X.Y.Z` placeholder'ı kullanmalı, böylece bump'lamayı unutmak imkansız.
 
 if [[ -f "$README" ]]; then
-    BAD_REFS=$(grep -nE 'mersel-dss-agent-signer-api-[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+_-]+)?\.jar' "$README" || true)
+    BAD_REFS=$(awk '
+        /<!-- LATEST_RELEASE:BEGIN -->/ { in_block = 1; next }
+        /<!-- LATEST_RELEASE:END -->/   { in_block = 0; next }
+        !in_block && /mersel-dss-agent-signer-api-[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+_-]+)?\.jar/ {
+            print NR ":" $0
+        }
+    ' "$README" || true)
     if [[ -n "$BAD_REFS" ]]; then
-        warn "README.md'de hard-coded jar sürümü bulundu (release workflow bu commit'i reddeder):"
+        warn "README.md'de (LATEST_RELEASE blok'u DIŞINDA) hard-coded jar sürümü bulundu — release workflow bu commit'i reddeder:"
         printf '%s\n' "$BAD_REFS" >&2
         fail "README'deki sürüm referanslarını 'X.Y.Z' placeholder'ına çevir, sonra tekrar dene."
     fi
@@ -337,6 +348,47 @@ if [[ $CHANGELOG_ALREADY_FINALIZED -eq 0 ]]; then
 fi
 
 # -----------------------------------------------------------------------------
+# 8.5. README.md "Son sürüm" CTA blok'unu güncelle
+# -----------------------------------------------------------------------------
+#
+# README'nin en üstündeki <!-- LATEST_RELEASE:BEGIN --> ... :END --> marker
+# blok'u TARGET_VERSION'a göre yeniden yazılır. Blok jar download URL'ini
+# hard-coded içerir (placeholder check yukarıda bu blok'u zaten muaf tutuyor).
+# Marker yoksa README'ye dokunulmaz (graceful — silinmiş veya henüz
+# eklenmemiş olabilir).
+
+README_UPDATED=0
+if [[ -f "$README" ]] && grep -q '<!-- LATEST_RELEASE:BEGIN -->' "$README"; then
+    info "README.md 'Son sürüm' CTA blok'u güncelleniyor: → v${TARGET_VERSION}"
+    if [[ $DRY_RUN -eq 0 ]]; then
+        TARGET_VER="$TARGET_VERSION" REPO="$REPO_SLUG" perl -i -0777 -pe '
+            my $ver  = $ENV{TARGET_VER};
+            my $repo = $ENV{REPO};
+            my $tag  = "v$ver";
+            my $base = "https://github.com/$repo";
+            my $jar  = "mersel-dss-agent-signer-api-$ver.jar";
+            my $bom  = "mersel-dss-agent-signer-api-$ver-bom.json";
+            my $block =
+                "<!-- LATEST_RELEASE:BEGIN -->\n\n"
+              . "> **Son sürüm — [\`$tag\`]($base/releases/tag/$tag)** \xC2\xB7\n"
+              . "> Doğrudan indir: [\`$jar\`]($base/releases/download/$tag/$jar) \xC2\xB7\n"
+              . "> [SHA-256]($base/releases/download/$tag/SHA256SUMS.txt) \xC2\xB7\n"
+              . "> [SBOM]($base/releases/download/$tag/$bom) \xC2\xB7\n"
+              . "> [Tüm sürümler]($base/releases)\n\n"
+              . "<!-- LATEST_RELEASE:END -->";
+            s|<!-- LATEST_RELEASE:BEGIN -->.*?<!-- LATEST_RELEASE:END -->|$block|s;
+        ' "$README"
+        ok "README.md CTA blok'u güncellendi (v${TARGET_VERSION} → ${REPO_SLUG}/releases/download/v${TARGET_VERSION}/...)."
+        README_UPDATED=1
+    else
+        printf "${Y}[DRY-RUN]${NC} README.md LATEST_RELEASE blok'u v${TARGET_VERSION} ile yeniden yazılacak.\n"
+        README_UPDATED=1
+    fi
+else
+    warn "README.md'de '<!-- LATEST_RELEASE:BEGIN -->' marker'ı yok; CTA blok güncellemesi atlandı."
+fi
+
+# -----------------------------------------------------------------------------
 # 9. (Opsiyonel) Spotless + test + build
 # -----------------------------------------------------------------------------
 
@@ -395,18 +447,31 @@ fi
 # 10. Git commit + tag
 # -----------------------------------------------------------------------------
 
-confirm "pom.xml + CHANGELOG.md değişikliklerini commit edeyim mi?" || {
+CONFIRM_PROMPT="pom.xml + CHANGELOG.md"
+if [[ $README_UPDATED -eq 1 ]]; then
+    CONFIRM_PROMPT="${CONFIRM_PROMPT} + README.md"
+fi
+confirm "${CONFIRM_PROMPT} değişikliklerini commit edeyim mi?" || {
     warn "Commit ve tag atlandı. Değişiklikler working tree'de duruyor."
     exit 0
 }
 
 info "git add + commit"
-run git add "$POM" "$CHANGELOG"
+if [[ $README_UPDATED -eq 1 ]]; then
+    run git add "$POM" "$CHANGELOG" "$README"
+else
+    run git add "$POM" "$CHANGELOG"
+fi
+README_COMMIT_LINE=""
+if [[ $README_UPDATED -eq 1 ]]; then
+    README_COMMIT_LINE="README.md 'Son surum' CTA blok'u v${TARGET_VERSION}'a guncellendi.
+"
+fi
 COMMIT_MSG="release: ${TAG}
 
 CHANGELOG.md finalize edildi: [Unreleased] -> [${TARGET_VERSION}].
 pom.xml version: ${CURRENT_VERSION} -> ${TARGET_VERSION}.
-
+${README_COMMIT_LINE}
 Tag '${TAG}' immutable'dir; release.yml workflow'u bu tag'i tetikleyici
 olarak kullanir ve mersel-dss-agent-signer-api-${TARGET_VERSION}.jar +
 CycloneDX SBOM + SHA256SUMS asset'lerini GitHub Release'e (DRAFT olarak)
