@@ -37,7 +37,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Doküman imzalama isteği")
 public class SignDocumentDto {
 
-  @Schema(description = "İmzalanacak içerik (PDF / XML).", required = true)
+  @Schema(
+      description = "İmzalanacak içerik (PDF / XML).",
+      type = "string",
+      format = "binary",
+      required = true)
   private MultipartFile content;
 
   @NotBlank
@@ -51,8 +55,11 @@ public class SignDocumentDto {
   @NotBlank
   @Schema(
       description =
-          "İmzalama için kullanılacak sertifikanın PKCS#11 alias'ı veya X.509 serial number'ı"
-              + " (hex). `GET /smartcard/certificate` yanıtındaki `id` alanından alınır.")
+          "İmzalama için kullanılacak sertifikanın X.509 serial number'ı (hex)."
+              + " `GET /smartcard/certificate` yanıtındaki `id` alanından alınır."
+              + " Geriye uyumluluk için PKCS#11 alias'ı da (yanıttaki `label` alanı) kabul edilir;"
+              + " imzalama servisi alias / serial / `0x...` öneki / büyük-küçük harf farkını"
+              + " tolere eder.")
   private String certificateId;
 
   @Schema(

@@ -80,10 +80,15 @@ public class CertificateListingService {
 
   private final SmartCardManager cardManager;
   private final CertificateInspector inspector;
+  private final CertificateChainBuilder chainBuilder;
 
-  public CertificateListingService(SmartCardManager cardManager, CertificateInspector inspector) {
+  public CertificateListingService(
+      SmartCardManager cardManager,
+      CertificateInspector inspector,
+      CertificateChainBuilder chainBuilder) {
     this.cardManager = cardManager;
     this.inspector = inspector;
+    this.chainBuilder = chainBuilder;
   }
 
   public List<CertificateResponse> listCertificates(String terminalName, String pkcs11LibraryPath) {
@@ -164,6 +169,33 @@ public class CertificateListingService {
       }
     }
     return false;
+  }
+
+  /**
+   * Token'dan inşa edilen kısmî zinciri AIA (Authority Information Access) extension üzerinden
+   * kök CA'ya kadar tamamlamayı dener. {@link CertificateChainBuilder} self-signed root'a varınca
+   * durur, network hatasında sessizce mevcut zincirle devam eder; bu yüzden başarısızlık riski
+   * yok — en kötü ihtimalle gelen zincir aynen geri döner.
+   *
+   * <p>Listeleme akışı boyunca her sertifika için ayrı AIA çağrısı yapılır; KamuSM kartlarında
+   * genellikle 1-2 ara CA + 1 root indirilir (toplam ~2-3 HTTP, timeout 3sn × 3). Cache eklemek
+   * istersen {@link CertificateChainBuilder} seviyesinde ortak bir LRU mantıklı olur.
+   */
+  X509Certificate[] extendChainViaAia(X509Certificate[] localChain) {
+    if (localChain == null || localChain.length == 0) {
+      return localChain;
+    }
+    if (chainBuilder == null) {
+      return localChain;
+    }
+    try {
+      java.security.cert.Certificate[] expanded = chainBuilder.build(localChain);
+      X509Certificate[] x509 = filterX509(expanded);
+      return x509.length >= localChain.length ? x509 : localChain;
+    } catch (RuntimeException e) {
+      log.debug("AIA chain genişletme başarısız (listeleme): {}", e.getMessage());
+      return localChain;
+    }
   }
 
   /**
@@ -248,7 +280,9 @@ public class CertificateListingService {
     X509Certificate[] chain = filterX509(chainRaw);
 
     CertificateResponse resp = new CertificateResponse();
-    resp.setId(tc.getAlias());
+    String x509Serial = cert.getSerialNumber().toString(16);
+    resp.setId(x509Serial);
+    resp.setLabel(tc.getAlias());
 
     String subjectDn = cert.getSubjectX500Principal().getName();
     String cn = extractRdn(subjectDn, BCStyle.CN);
@@ -256,12 +290,20 @@ public class CertificateListingService {
     resp.setSubject(cn != null ? cn : subjectDn);
     resp.setIssuer(cert.getIssuerX500Principal().getName());
     resp.setTaxId(taxId);
-    resp.setX509SerialNumber(cert.getSerialNumber().toString(16));
+    resp.setX509SerialNumber(x509Serial);
     resp.setNotBefore(formatInstant(cert.getNotBefore()));
     resp.setNotAfter(formatInstant(cert.getNotAfter()));
 
-    CertificateStatusResponse statusResp = inspector.inspectWithRevocation(cert, chain);
+    // Token'a yazılı bundle çoğunlukla yalnız leaf içeriyor (özellikle KamuSM kartlarında).
+    // RevocationChecker.findIssuer() chain üzerinde issuer bulamazsa OCSP/CRL'i atlamak zorunda
+    // kalıyor → status=UNKNOWN. Bu yüzden bundle-only chain'i AIA üzerinden root'a kadar
+    // genişletip o tam zinciri RevocationChecker'a veriyoruz. CertificateChainBuilder zaten
+    // self-signed root noktasında durur ve AIA HTTP timeout'larını yutar — başarısızsa elimizdeki
+    // zincirle devam eder, listeleme kesilmez.
+    X509Certificate[] revocationChain = extendChainViaAia(chain);
+    CertificateStatusResponse statusResp = inspector.inspectWithRevocation(cert, revocationChain);
     resp.setStatus(statusResp.getStatus());
+    resp.setValid(computeValidity(cert));
     resp.setQualified(inspector.isQualified(cert));
 
     resp.setKeyUsages(inspector.keyUsage(cert));
@@ -295,6 +337,38 @@ public class CertificateListingService {
     CertificateStatusResponse.Status s = status.getStatus();
     if (s == CertificateStatusResponse.Status.REVOKED
         || s == CertificateStatusResponse.Status.EXPIRED) {
+      return false;
+    }
+    Instant now = Instant.now();
+    Date notBefore = cert.getNotBefore();
+    Date notAfter = cert.getNotAfter();
+    if (notBefore != null && now.isBefore(notBefore.toInstant())) {
+      return false;
+    }
+    if (notAfter != null && now.isAfter(notAfter.toInstant())) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Sertifikanın "şu anda zamansal geçerlilik penceresi içinde mi?" boolean'ı — saf {@code
+   * notBefore <= now <= notAfter} kontrolü. Network'siz, deterministik; OCSP/CRL durumundan
+   * <b>bağımsız</b>.
+   *
+   * <p>Tasarım gerekçesi: KamuSM kartlarında token'a yazılı sertifika zincirinde issuer cert
+   * eksik kalabiliyor (özellikle eski kartlar yalnız leaf yazıyor); bu durumda {@link
+   * RevocationChecker} {@code UNKNOWN} döndürür. Eski sürümde {@code valid = (status == ACTIVE)}
+   * olduğundan, OCSP'i bağlanamayan veya issuer'ı eksik olan tamamen sağlam bir cert {@code
+   * valid=false} görünüyordu. Frontend bu kullanıcının "geçerli sertifikam var ama UI bana yok
+   * diyor" şikayetiyle karşılaşıyordu. Yeni sözleşme: {@code valid} <b>yalnız</b> süre kontrolü
+   * yapar. Revocation durumunu kullanıcıya göstermek isteyen frontend hâlâ {@code status} alanını
+   * okuyabilir.
+   *
+   * @return cert null değil, notBefore geçmiş ve notAfter henüz dolmamışsa {@code true}
+   */
+  static boolean computeValidity(X509Certificate cert) {
+    if (cert == null) {
       return false;
     }
     Instant now = Instant.now();

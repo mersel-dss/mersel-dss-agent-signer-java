@@ -52,7 +52,7 @@ class CertificateListingServiceRecommendationTest {
   @BeforeEach
   void setUp() {
     // null bağımlılıklarla — annotateRecommendation onlara ihtiyaç duymaz.
-    service = new CertificateListingService(null, null);
+    service = new CertificateListingService(null, null, null);
   }
 
   @Test

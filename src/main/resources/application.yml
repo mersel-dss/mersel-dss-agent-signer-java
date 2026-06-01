@@ -9,7 +9,7 @@
 #
 
 server:
-  port: ${MERSEL_AGENT_PORT:15211}
+  port: ${MERSEL_AGENT_PORT:15212}
   address: ${MERSEL_AGENT_BIND:127.0.0.1}
   connection-timeout: -1
   servlet:

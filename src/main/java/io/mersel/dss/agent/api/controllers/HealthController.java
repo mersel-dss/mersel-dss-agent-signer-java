@@ -29,6 +29,7 @@ package io.mersel.dss.agent.api.controllers;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,7 +46,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class HealthController {
 
   @Operation(summary = "Servisin ayakta olduğunu doğrular.")
-  @GetMapping("/health/ping")
+  @GetMapping(value = "/health/ping", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<Map<String, Object>> ping() {
     Map<String, Object> body = new HashMap<String, Object>();
     body.put("status", "UP");

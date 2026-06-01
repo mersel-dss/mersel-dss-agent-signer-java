@@ -81,7 +81,7 @@ public class DesktopUiBootstrap {
       SignerProperties properties,
       UpdateService updateService,
       UpdateGate updateGate,
-      @Value("${server.port:15211}") int serverPort,
+      @Value("${server.port:15212}") int serverPort,
       @Value("${server.address:127.0.0.1}") String serverAddress,
       @Value("${server.servlet.context-path:/}") String contextPath) {
     this.properties = properties;

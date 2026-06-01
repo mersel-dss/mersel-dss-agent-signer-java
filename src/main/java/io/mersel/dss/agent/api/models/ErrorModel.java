@@ -64,6 +64,12 @@ public class ErrorModel {
   private List<String> cardTypeCandidates;
   private Boolean userSelectionRequired;
 
+  // PKCS#11 PIN/auth tanılama alanları (sadece PKCS11_PIN_* / PKCS11_AUTH_FAILED için).
+  // Frontend bunlarla retry/disable kararı verir; PUK reset yönlendirmesi için locked'a bakar.
+  private String pkcs11Code;
+  private Boolean pinLocked;
+  private String pinAttemptsRemainingHint;
+
   public ErrorModel() {
     this.timestamp = OffsetDateTime.now().toString();
   }
@@ -144,5 +150,29 @@ public class ErrorModel {
 
   public void setUserSelectionRequired(Boolean userSelectionRequired) {
     this.userSelectionRequired = userSelectionRequired;
+  }
+
+  public String getPkcs11Code() {
+    return pkcs11Code;
+  }
+
+  public void setPkcs11Code(String pkcs11Code) {
+    this.pkcs11Code = pkcs11Code;
+  }
+
+  public Boolean getPinLocked() {
+    return pinLocked;
+  }
+
+  public void setPinLocked(Boolean pinLocked) {
+    this.pinLocked = pinLocked;
+  }
+
+  public String getPinAttemptsRemainingHint() {
+    return pinAttemptsRemainingHint;
+  }
+
+  public void setPinAttemptsRemainingHint(String pinAttemptsRemainingHint) {
+    this.pinAttemptsRemainingHint = pinAttemptsRemainingHint;
   }
 }

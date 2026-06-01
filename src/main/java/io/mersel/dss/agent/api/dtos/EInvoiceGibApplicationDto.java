@@ -68,8 +68,11 @@ public class EInvoiceGibApplicationDto {
   @NotBlank
   @Schema(
       description =
-          "İmzalama için kullanılacak sertifikanın PKCS#11 alias'ı / X.509 serial number'ı."
-              + " `GET /smartcard/certificate` yanıtındaki `id` veya `x509SerialNumber`'dan alınır.")
+          "İmzalama için kullanılacak sertifikanın X.509 serial number'ı (hex)."
+              + " `GET /smartcard/certificate` yanıtındaki `id` (veya geriye uyumluluk için"
+              + " `x509SerialNumber`) alanından alınır. PKCS#11 alias'ı (`label` alanı) da kabul"
+              + " edilir; sunucu alias / serial / `0x...` öneki / büyük-küçük harf farkını tolere"
+              + " eder.")
   private String certificateId;
 
   @Schema(

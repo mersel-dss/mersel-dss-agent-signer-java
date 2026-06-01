@@ -81,7 +81,7 @@ Tehdit/azaltma haritası:
 
 ### 5. CORS / CSRF
 
-- **Tehdit**: Bir web sayfası kullanıcının `http://localhost:15211`
+- **Tehdit**: Bir web sayfası kullanıcının `http://localhost:15212`
   üzerinden imzalama isteği tetikleyebilir.
 - **Hafifletme**: Default CORS politikası **yalnız loopback origin
   pattern'lerine** izin verir. Tarayıcı uzantısı veya ek origin

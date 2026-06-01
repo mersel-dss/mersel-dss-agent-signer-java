@@ -26,6 +26,7 @@
  */
 package io.mersel.dss.agent.api.controllers;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -59,7 +60,7 @@ public class UpdateController {
       description =
           "ETag/conditional-GET ile GitHub'a fazla yük bindirmez. Daemon hazır olduktan sonra"
               + " arka planda zaten bir kez sorgulamış olabilir; sonuç cache'lenmiştir.")
-  @GetMapping("/update/status")
+  @GetMapping(value = "/update/status", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<UpdateInfo> status() {
     return ResponseEntity.ok(updateService.currentStatus(false));
   }
@@ -69,7 +70,7 @@ public class UpdateController {
       description =
           "ETag/conditional-GET cache'i atlar; her zaman GitHub'a yeni istek atar. UI 'Yenile'"
               + " butonu için.")
-  @PostMapping("/update/check")
+  @PostMapping(value = "/update/check", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<UpdateInfo> check() {
     return ResponseEntity.ok(updateService.currentStatus(true));
   }

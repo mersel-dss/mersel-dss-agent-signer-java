@@ -109,7 +109,9 @@ public class GibApplicationController {
   }
 
   @Operation(summary = "GİB e-Fatura başvurusunu VKN/TCKN ile sorgular.")
-  @GetMapping("/gibApplication")
+  @GetMapping(
+      value = "/gibApplication",
+      produces = org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<GibApplicationQueryResponse> query(
       @Parameter(description = "Mükellef VKN (10 hane) veya TCKN (11 hane).", required = true)
           @RequestParam("taxId")
@@ -232,7 +234,10 @@ public class GibApplicationController {
       description =
           "Başvuru formunu PDF olarak üretir, PAdES (CADES) ile imzalar ve GİB başvuru sunucusuna"
               + " iletir.")
-  @PostMapping("/gibApplication")
+  @PostMapping(
+      value = "/gibApplication",
+      consumes = org.springframework.http.MediaType.APPLICATION_JSON_VALUE,
+      produces = org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<GibApplicationResponse> apply(
       @Valid @RequestBody EInvoiceGibApplicationDto body) throws Exception {
 
@@ -244,7 +249,10 @@ public class GibApplicationController {
 
     CertificateResponse selected =
         certs.stream()
-            .filter(c -> body.getCertificateId().equalsIgnoreCase(c.getId()))
+            .filter(
+                c ->
+                    body.getCertificateId().equalsIgnoreCase(c.getId())
+                        || body.getCertificateId().equalsIgnoreCase(c.getLabel()))
             .findFirst()
             .orElseThrow(
                 () ->

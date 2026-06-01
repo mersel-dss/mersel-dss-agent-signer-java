@@ -19,14 +19,14 @@
 > **XAdES** imza üreten ve **GİB e-Fatura başvurusu** gönderen yerel
 > imza uygulaması. **Tek jar dosyası — macOS, Linux ve Windows'ta aynı,
 > çift tıkla çalışır.** Tarayıcı veya masaüstü uygulaman
-> `http://localhost:15211` adresine bağlanıp imzalama işlemlerini
+> `http://localhost:15212` adresine bağlanıp imzalama işlemlerini
 > tetikler; karta dokunan kod asla sunucuda değil, hep kullanıcının
 > yanında çalışır.
 
 ## Nasıl kullanılır?
 
 Kullanıcının makinesinde uygulamayı başlatıyorsunuz; arka planda
-`http://localhost:15211` üzerinde dinliyor. Sonra **kendi masaüstü
+`http://localhost:15212` üzerinde dinliyor. Sonra **kendi masaüstü
 uygulamanızdan, tarayıcı eklentinizden veya web uygulamanızdan** bu
 adrese HTTP istekleri atarak:
 
@@ -47,7 +47,7 @@ Explorer üçü de standart Java Runtime association'ı varsayar. Çift
 tıkladığında:
 
 1. Kısa bir splash penceresi açılır,
-2. Uygulama `http://localhost:15211` adresinde dinlemeye başlar,
+2. Uygulama `http://localhost:15212` adresinde dinlemeye başlar,
 3. Sistem tepsisinde (macOS menubar / Windows tray / Linux indicator)
    Mersel simgesi belirir — "API dökümanını aç", "Sağlık kontrolünü aç"
    ve "Çıkış" menüsüyle.
@@ -72,24 +72,24 @@ java -jar mersel-dss-agent-signer-api-X.Y.Z.jar
 java -jar mersel-dss-agent-signer-api-X.Y.Z.jar
 
 # 2) Bağlı okuyucuları ve kart tipini al.
-curl http://localhost:15211/smartcard
+curl http://localhost:15212/smartcard
 
 # 3) Sertifikaları PIN istemeden listele, kullanıcıya seçtir.
-curl 'http://localhost:15211/smartcard/certificate?terminalName=ACR39U%20ICC%20Reader&purpose=SIGNING'
+curl 'http://localhost:15212/smartcard/certificate?terminalName=ACR39U%20ICC%20Reader&purpose=SIGNING'
 ```
 
 Kullanıcı sertifikayı seçtikten sonra PIN'i alıp imzayı tetikleyin:
 
 ```bash
 # PDF imzası — PAdES-B (e-Fatura, e-Arşiv, sözleşme vb.)
-curl -X POST http://localhost:15211/pades/sign \
+curl -X POST http://localhost:15212/pades/sign \
   -F 'content=@invoice.pdf' \
   -F 'terminalName=ACR39U ICC Reader' \
   -F 'certificateId=6180884538SIGN0' \
   -F 'pin=123456'
 
 # XML imzası — XAdES-BES (e-Defter, beyanname vb.)
-curl -X POST http://localhost:15211/xades/sign \
+curl -X POST http://localhost:15212/xades/sign \
   -F 'content=@yevmiye-defteri.xml' \
   -F 'terminalName=ACR39U ICC Reader' \
   -F 'certificateId=6180884538SIGN0' \
@@ -97,7 +97,7 @@ curl -X POST http://localhost:15211/xades/sign \
   -F 'contentType=XADES_BES'
 
 # XML counter-imza — HR-XML müşteri tarafı imzası
-curl -X POST http://localhost:15211/xades/sign \
+curl -X POST http://localhost:15212/xades/sign \
   -F 'content=@hrxml-server-signed.xml' \
   -F 'terminalName=ACR39U ICC Reader' \
   -F 'certificateId=6180884538SIGN0' \
@@ -106,7 +106,7 @@ curl -X POST http://localhost:15211/xades/sign \
 ```
 
 Tüm endpoint'leri tarayıcıdan canlı denemek için
-<http://localhost:15211/> adresindeki **Scalar UI**'ya bakın.
+<http://localhost:15212/> adresindeki **Scalar UI**'ya bakın.
 
 > **UX ipucu:** PIN'i en başta değil, **yalnız imza ekranında** sorun.
 > Kart tak → sertifikaları listele → kullanıcı seçsin → PIN'i o an iste
@@ -323,7 +323,7 @@ header'larına ve [`NOTICE`](NOTICE) dosyasına bakın.
 | GET    | `/`                      | Scalar API reference UI |
 
 Tam parametre listesi ve canlı deneme için Scalar UI'a bakın
-(<http://localhost:15211/>).
+(<http://localhost:15212/>).
 
 ### Sertifika seçim mantığı
 
@@ -394,7 +394,7 @@ PDF okuyucuların imza panelinde görünen iki alan:
 | `location` | `""` (boş) | "Konum" / "Location" |
 
 ```bash
-curl -X POST http://localhost:15211/pades/sign \
+curl -X POST http://localhost:15212/pades/sign \
   -F 'content=@invoice.pdf' \
   -F 'terminalName=ACR39U ICC Reader' \
   -F 'certificateId=6180884538SIGN0' \
@@ -466,7 +466,7 @@ override edilir (Spring Boot relaxed binding).
 
 | Env var | Varsayılan | Anlam |
 |---|---|---|
-| `MERSEL_AGENT_PORT` | `15211` | HTTP bağlanma portu |
+| `MERSEL_AGENT_PORT` | `15212` | HTTP bağlanma portu |
 | `MERSEL_AGENT_BIND` | `127.0.0.1` | Bind adresi (loopback dışı için `0.0.0.0`) |
 | `MERSEL_AGENT_CORS_ORIGINS` | loopback | CORS origin pattern'leri (virgülle ayrılmış) |
 | `MERSEL_AGENT_AIA_ENABLED` | `true` | Sertifika zinciri AIA ile tamamlansın mı |

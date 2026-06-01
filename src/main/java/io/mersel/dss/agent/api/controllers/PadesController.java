@@ -43,6 +43,11 @@ import org.springframework.web.bind.annotation.RestController;
 import io.mersel.dss.agent.api.dtos.SignDocumentDto;
 import io.mersel.dss.agent.api.services.signature.PadesService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /** PDF belgelerini PAdES-B (CADES) ile imzalar. */
@@ -64,9 +69,30 @@ public class PadesController {
           "Multipart form-data ile PDF yükleyin. Sertifika seçimi için önce"
               + " `GET /smartcard/certificate` çağırın ve dönen sertifikalardan `recommended=true`"
               + " olan veya `purpose=SIGNING` + `eligibleForSignature=true` olan birinin `id`"
-              + " alanını `certificateId` olarak gönderin.")
-  @PostMapping(value = "/pades/sign", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<ByteArrayResource> sign(@Valid @ModelAttribute SignDocumentDto dto) {
+              + " alanını `certificateId` olarak gönderin.",
+      requestBody =
+          @io.swagger.v3.oas.annotations.parameters.RequestBody(
+              required = true,
+              description = "İmzalanacak PDF + imzalama parametreleri (multipart form alanları).",
+              content =
+                  @Content(
+                      mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+                      schema = @Schema(implementation = SignDocumentDto.class))))
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "İmzalı PDF (binary).",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_PDF_VALUE,
+                schema = @Schema(type = "string", format = "binary")))
+  })
+  @PostMapping(
+      value = "/pades/sign",
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+      produces = MediaType.APPLICATION_PDF_VALUE)
+  public ResponseEntity<ByteArrayResource> sign(
+      @Parameter(hidden = true) @Valid @ModelAttribute SignDocumentDto dto) {
 
     if (dto.getContent() == null || dto.getContent().isEmpty()) {
       throw new IllegalArgumentException("'content' (PDF dosyası) zorunludur.");

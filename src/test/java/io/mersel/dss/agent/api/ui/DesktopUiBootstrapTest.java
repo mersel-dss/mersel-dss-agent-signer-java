@@ -83,7 +83,7 @@ class DesktopUiBootstrapTest {
     UpdateGate gate = new UpdateGate(props);
 
     DesktopUiBootstrap boot =
-        new DesktopUiBootstrap(props, updateService, gate, 15211, "127.0.0.1", "/");
+        new DesktopUiBootstrap(props, updateService, gate, 15212, "127.0.0.1", "/");
 
     ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
     assertDoesNotThrow(() -> boot.onApplicationReady(event));
@@ -100,7 +100,7 @@ class DesktopUiBootstrapTest {
     UpdateService updateService = mock(UpdateService.class);
     UpdateGate gate = new UpdateGate(props);
     DesktopUiBootstrap boot =
-        new DesktopUiBootstrap(props, updateService, gate, 15211, "127.0.0.1", "/");
+        new DesktopUiBootstrap(props, updateService, gate, 15212, "127.0.0.1", "/");
 
     ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
     assertDoesNotThrow(() -> boot.onApplicationReady(event));

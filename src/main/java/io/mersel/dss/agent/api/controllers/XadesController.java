@@ -42,6 +42,11 @@ import io.mersel.dss.agent.api.dtos.SignDocumentDto;
 import io.mersel.dss.agent.api.models.enums.XmlContentType;
 import io.mersel.dss.agent.api.services.signature.XadesService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /** XAdES imzalama uçları. */
@@ -61,9 +66,30 @@ public class XadesController {
       summary = "XML belgesini XAdES-BES ile imzalar.",
       description =
           "Multipart form-data ile XML yükleyin. `contentType` zorunlu (XmlDocument |"
-              + " HrXmlCounterSignature, case-insensitive).")
-  @PostMapping(value = "/xades/sign", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<ByteArrayResource> sign(@Valid @ModelAttribute SignDocumentDto dto) {
+              + " HrXmlCounterSignature, case-insensitive).",
+      requestBody =
+          @io.swagger.v3.oas.annotations.parameters.RequestBody(
+              required = true,
+              description = "İmzalanacak XML + imzalama parametreleri (multipart form alanları).",
+              content =
+                  @Content(
+                      mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+                      schema = @Schema(implementation = SignDocumentDto.class))))
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "İmzalı XML (binary).",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_XML_VALUE,
+                schema = @Schema(type = "string", format = "binary")))
+  })
+  @PostMapping(
+      value = "/xades/sign",
+      consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+      produces = MediaType.APPLICATION_XML_VALUE)
+  public ResponseEntity<ByteArrayResource> sign(
+      @Parameter(hidden = true) @Valid @ModelAttribute SignDocumentDto dto) {
 
     if (dto.getContent() == null || dto.getContent().isEmpty()) {
       throw new IllegalArgumentException("'content' (XML dosyası) zorunludur.");

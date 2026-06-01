@@ -43,6 +43,7 @@ import io.mersel.dss.agent.api.models.SmartCardResponse;
 import io.mersel.dss.agent.api.services.certificate.CertificateListingService;
 import io.mersel.dss.agent.api.services.smartcard.CardType;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardInfo;
+import io.mersel.dss.agent.api.services.smartcard.SmartCardPinValidator;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardReaderService;
 
 /**
@@ -63,7 +64,8 @@ class SmartCardControllerHostMetadataTest {
     CertificateListingService listing = mock(CertificateListingService.class);
     when(reader.listCardsWithMeta()).thenReturn(Collections.<SmartCardInfo>emptyList());
 
-    SmartCardController controller = new SmartCardController(reader, listing);
+    SmartCardController controller =
+        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class));
     ResponseEntity<SmartCardResponse> resp = controller.listCards();
 
     assertThat(resp.getStatusCodeValue()).isEqualTo(200);
@@ -91,7 +93,8 @@ class SmartCardControllerHostMetadataTest {
         new SmartCardInfo("ACR39U", "3B7F18000000638031C0735C019C03C9C0C0C0", akis);
     when(reader.listCardsWithMeta()).thenReturn(Collections.singletonList(info));
 
-    SmartCardController controller = new SmartCardController(reader, listing);
+    SmartCardController controller =
+        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class));
     ResponseEntity<SmartCardResponse> resp = controller.listCards();
 
     SmartCardResponse body = resp.getBody();
@@ -113,7 +116,8 @@ class SmartCardControllerHostMetadataTest {
     SmartCardInfo info = new SmartCardInfo("Generic Reader", "3BAABBCCDDEEFF", null);
     when(reader.listCardsWithMeta()).thenReturn(Collections.singletonList(info));
 
-    SmartCardController controller = new SmartCardController(reader, listing);
+    SmartCardController controller =
+        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class));
     ResponseEntity<SmartCardResponse> resp = controller.listCards();
 
     SmartCardResponse body = resp.getBody();
@@ -131,7 +135,8 @@ class SmartCardControllerHostMetadataTest {
     CertificateListingService listing = mock(CertificateListingService.class);
     when(reader.listCardsWithMeta()).thenReturn(Collections.<SmartCardInfo>emptyList());
 
-    SmartCardController controller = new SmartCardController(reader, listing);
+    SmartCardController controller =
+        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class));
     SmartCardResponse body = controller.listCards().getBody();
     String json = new ObjectMapper().writeValueAsString(body);
 

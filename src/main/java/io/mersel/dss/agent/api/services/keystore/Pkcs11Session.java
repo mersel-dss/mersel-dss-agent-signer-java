@@ -158,18 +158,58 @@ public final class Pkcs11Session implements AutoCloseable {
     } catch (Exception loadFail) {
       Security.removeProvider(provider.getName());
       silentDelete(configFile);
-      String msg =
-          loadFail.getMessage() == null
-              ? loadFail.getClass().getSimpleName()
-              : loadFail.getMessage();
-      if (msg.toLowerCase(Locale.ROOT).contains("pin")
-          || msg.toLowerCase(Locale.ROOT).contains("incorrect")
-          || msg.toLowerCase(Locale.ROOT).contains("auth")) {
-        throw new Pkcs11AuthException("PIN doğrulaması başarısız.", loadFail);
-      }
-      throw new Pkcs11LibraryException("PKCS#11 keystore yüklenemedi: " + msg, loadFail);
+      throw mapKeyStoreLoadFailure(loadFail);
     }
     return new Pkcs11Session(provider, ks, configFile, name, pinChars, true);
+  }
+
+  /**
+   * SunPKCS11'in {@code KeyStore.load} sırasında fırlattığı hatayı, cause zincirini gezerek alttaki
+   * {@code PKCS11Exception}'ın {@code CKR_xxx} koduna göre yapısal exception'a çevirir.
+   *
+   * <p>Eski string-tabanlı heuristic ({@code msg.contains("pin")}) en üstteki {@code "load failed"}
+   * mesajına bakıyordu ve gerçek PIN hatasını ıskalıyordu — sonuç olarak yanlış PIN yanıtı {@code
+   * 503 PKCS11_UNAVAILABLE} dönüyordu. Yeni davranış: PKCS#11 v2.40 §A "Return Values" tablosundaki
+   * sembolik koda göre uygun exception + frontend dostu detaylar.
+   */
+  static RuntimeException mapKeyStoreLoadFailure(Throwable loadFail) {
+    Pkcs11Errors.Outcome outcome = Pkcs11Errors.classify(loadFail);
+    String topMsg =
+        loadFail.getMessage() == null
+            ? loadFail.getClass().getSimpleName()
+            : loadFail.getMessage();
+    switch (outcome.getKind()) {
+      case PIN_INCORRECT:
+      case PIN_LOCKED:
+      case PIN_EXPIRED:
+      case PIN_INVALID_FORMAT:
+        return new Pkcs11AuthException(
+            outcome.getErrorCode(),
+            outcome.getMessage(),
+            loadFail,
+            outcome.getPkcs11Code(),
+            outcome.isLocked(),
+            outcome.getAttemptsRemainingHint());
+      case DEVICE_REMOVED:
+        // Akıllı kart fiziksel olarak çıkarıldı / sürücü hatası — auth değil, donanım sorunu.
+        // SmartCardException kullanmak daha doğru olabilirdi ama burada sebep zinciri PIN-flow
+        // ortasından geliyor; library exception 503 davranışı yeterince anlamlı.
+        return new Pkcs11LibraryException(
+            "PKCS#11 cihaz hatası (" + outcome.getPkcs11Code() + "): " + outcome.getMessage(),
+            loadFail);
+      case SESSION_BUSY:
+        return new Pkcs11LibraryException(
+            "PKCS#11 oturumu meşgul (" + outcome.getPkcs11Code() + "): " + outcome.getMessage(),
+            loadFail);
+      case UNKNOWN:
+      default:
+        // Ne PIN koduna ne donanım koduna eşleşmedi — istisnai ama mümkün (eski sürücü, custom
+        // CKR_VENDOR_xxx). Eski davranışa düş: PKCS11_UNAVAILABLE ama mesajı CKR ile zenginleştir.
+        String suffix =
+            outcome.getPkcs11Code() == null ? "" : " (" + outcome.getPkcs11Code() + ")";
+        return new Pkcs11LibraryException(
+            "PKCS#11 keystore yüklenemedi: " + topMsg + suffix, loadFail);
+    }
   }
 
   /**
@@ -333,7 +373,19 @@ public final class Pkcs11Session implements AutoCloseable {
     try {
       return (PrivateKey) keyStore.getKey(alias, pin);
     } catch (UnrecoverableKeyException e) {
-      throw new Pkcs11AuthException("Private key alınamadı: PIN doğrulaması başarısız.", e);
+      // PIN ile tekrar yetkilendirme gerekti veya PIN yanlış yorumlandı; cause zincirinde varsa
+      // CKR_xxx koduna göre yapılandır, yoksa generic auth fail.
+      Pkcs11Errors.Outcome outcome = Pkcs11Errors.classify(e);
+      if (outcome.getKind() == Pkcs11Errors.Kind.UNKNOWN) {
+        throw new Pkcs11AuthException("Private key alınamadı: PIN doğrulaması başarısız.", e);
+      }
+      throw new Pkcs11AuthException(
+          outcome.getErrorCode(),
+          "Private key alınamadı: " + outcome.getMessage(),
+          e,
+          outcome.getPkcs11Code(),
+          outcome.isLocked(),
+          outcome.getAttemptsRemainingHint());
     } catch (KeyStoreException | java.security.NoSuchAlgorithmException e) {
       throw new CertificateLookupException("Private key alınamadı: " + e.getMessage(), e);
     }

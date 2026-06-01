@@ -72,14 +72,39 @@ public class GlobalExceptionHandler {
 
   /* ---------------- 401 / 404 / 424 / 503 — domain ---------------- */
 
+  /**
+   * PIN / auth hatalarını yapısal olarak yansıtır. PKCS#11 cause zincirinden çıkarılan {@code
+   * CKR_xxx} kodu ve "locked" / kalan deneme ipucu varsa {@code ErrorModel}'e işlenir; locked
+   * durumda HTTP 423 (RFC 4918 Locked) dönülür ki frontend retry yolunu kapatabilsin.
+   */
   @ExceptionHandler(Pkcs11AuthException.class)
   public ResponseEntity<ErrorModel> handlePkcs11Auth(Pkcs11AuthException ex) {
-    LOGGER.warn("401 PIN/Auth: {}", ex.getMessage());
-    return body(
-        HttpStatus.UNAUTHORIZED,
-        new ErrorModel(
-            ex.getErrorCode(),
-            "PIN doğrulanamadı veya yanlış. Karta erişim engellenebilir, dikkat."));
+    String pkcs11Code = ex.getPkcs11Code();
+    boolean locked = ex.isLocked();
+    LOGGER.warn(
+        "{} PIN/Auth: code={} pkcs11Code={} locked={} message={}",
+        locked ? "423" : "401",
+        ex.getErrorCode(),
+        pkcs11Code,
+        locked,
+        ex.getMessage());
+
+    String message =
+        ex.getMessage() != null && !ex.getMessage().isEmpty()
+            ? ex.getMessage()
+            : "PIN doğrulanamadı. Karta erişim engellenebilir, dikkat.";
+
+    ErrorModel model = new ErrorModel(ex.getErrorCode(), message);
+    if (pkcs11Code != null) {
+      model.setPkcs11Code(pkcs11Code);
+    }
+    if (locked) {
+      model.setPinLocked(Boolean.TRUE);
+    }
+    if (ex.getAttemptsRemainingHint() != null) {
+      model.setPinAttemptsRemainingHint(ex.getAttemptsRemainingHint());
+    }
+    return body(locked ? HttpStatus.LOCKED : HttpStatus.UNAUTHORIZED, model);
   }
 
   @ExceptionHandler(CertificateLookupException.class)

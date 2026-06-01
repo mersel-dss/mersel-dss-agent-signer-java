@@ -58,8 +58,20 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class CertificateResponse {
 
-  @Schema(description = "Sertifikanın kart üzerindeki PKCS#11 alias'ı (kanonik ID).")
+  @Schema(
+      description =
+          "Sertifikanın kanonik ID'si — X.509 serial number'ı (hex, alt çizgi/boşluk yok)."
+              + " İmzalama uçlarına `certificateId` olarak bu değer gönderilir. Aynı değer geriye"
+              + " uyumluluk için `x509SerialNumber` alanında da döner.")
   private String id;
+
+  @Schema(
+      description =
+          "Sertifikanın kart üzerindeki PKCS#11 alias'ı (CKA_LABEL). Kullanıcıya gösterilecek"
+              + " insan-okur etiket; `id` X.509 serial olarak değiştiğinden eski `id` (alias)"
+              + " değeri bu alanda yer alır. Bazı kartlarda boş veya tekrarlı olabilir; benzersiz"
+              + " bir kimlik için `id` kullanın.")
+  private String label;
 
   @Schema(description = "Sertifika konusunun CN (Common Name) alanı; CN yoksa ham subject DN.")
   private String subject;
@@ -84,6 +96,20 @@ public class CertificateResponse {
 
   @Schema(description = "Sertifikanın geçerlilik durumu (ACTIVE, EXPIRED, REVOKED, UNKNOWN).")
   private CertificateStatusResponse.Status status;
+
+  @Schema(
+      description =
+          "Sertifikanın şu anda **zamansal geçerlilik penceresi içinde** olup olmadığı"
+              + " (`notBefore <= now <= notAfter`). Network'siz, deterministik; OCSP/CRL"
+              + " revocation durumundan **bağımsız**. Süresi dolmuş veya henüz geçerli olmayan"
+              + " sertifika `false`; aksi halde `true`.\n\n"
+              + "Revocation (iptal) durumunu görmek için `status` alanını kullanın — bu alan"
+              + " kasıtlı olarak revocation'a bakmaz çünkü KamuSM kartlarında token'a yazılı"
+              + " zincirde issuer cert eksik kalabiliyor ve OCSP/CRL `UNKNOWN` döndürebiliyor;"
+              + " bu durum tamamen geçerli bir sertifikanın UI'da yanlışlıkla \"geçersiz\""
+              + " görünmesine yol açıyordu. İmzaya uygunluk için `eligibleForSignature`"
+              + " (validity + purpose composite) bakın.")
+  private boolean valid;
 
   @Schema(
       description =
@@ -166,6 +192,14 @@ public class CertificateResponse {
     this.id = id;
   }
 
+  public String getLabel() {
+    return label;
+  }
+
+  public void setLabel(String label) {
+    this.label = label;
+  }
+
   public String getSubject() {
     return subject;
   }
@@ -220,6 +254,14 @@ public class CertificateResponse {
 
   public void setStatus(CertificateStatusResponse.Status status) {
     this.status = status;
+  }
+
+  public boolean isValid() {
+    return valid;
+  }
+
+  public void setValid(boolean valid) {
+    this.valid = valid;
   }
 
   public Boolean getQualified() {

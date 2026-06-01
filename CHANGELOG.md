@@ -6,6 +6,127 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /smartcard/certificate` — `CertificateResponse.valid` alanı
+  eklendi (REST wire contract genişlemesi, additive)**: Yanıt modeline
+  her sertifika için `valid: boolean` çıktısı eklendi. Tanım: yalnız
+  **zamansal geçerlilik penceresi** kontrolü (`notBefore <= now <=
+  notAfter`); network'siz, deterministik. OCSP/CRL revocation
+  durumundan **bağımsızdır** — KamuSM kartlarında token'a yazılı
+  zincirde issuer cert eksik kaldığında `RevocationChecker` `UNKNOWN`
+  döndürür ve bu, tamamen geçerli bir sertifikanın UI'da yanlışlıkla
+  "geçersiz" görünmesine yol açıyordu; yeni alan revocation'a
+  bakmadığı için bu sorunu çözer. Süresi dolmuş veya henüz geçerli
+  olmayan sertifika `false` döner; aksi `true`. Revocation görünümü
+  hâlâ `status` enum'unda (ACTIVE / EXPIRED / REVOKED / UNKNOWN);
+  imzaya uygunluk için `eligibleForSignature` (validity + purpose
+  composite) bakın. Frontend kart seçim ekranında "süresi dolmuş"
+  sertifikaları disable etmek için bu alanı tek başına kullanabilir.
+  Geriye uyumluluk: yeni alan eklendi, hiçbir alan adı/semantiği
+  değişmedi.
+- **`POST /smartcard/pin/validate` — PIN'i imzalamadan önce doğrulayan
+  yeni uç (REST wire contract genişlemesi)**: Frontend giriş ekranı
+  kullanıcının PIN'ini büyük dosya yüklemeden ve imzalama akışına
+  geçmeden önce ucuz bir `C_Login` + `C_Logout` ile doğrulayabilir.
+  Sözleşme: JSON body `{ terminalName, pin, pkcs11LibraryPath?,
+  cardType? }`; başarılıysa `200 + { valid: true, terminalName,
+  cardType, pkcs11LibraryPath }`, PIN yanlışsa standart
+  `401 PKCS11_AUTH_FAILED` (`ErrorModel`), kart sürücüsü yoksa
+  `503 PKCS11_LIBRARY_NOT_FOUND` döner — yani aynı hata sözleşmesini
+  diğer imzalama uçlarıyla paylaşır. Yeni servis
+  `services.smartcard.SmartCardPinValidator` `SmartCardManager` 4-katmanlı
+  kart-tipi çözümünü tekrar kullanır; oturum sertifika / private key
+  okumadan derhal kapatılır, PIN char[] sıfırlanır. **Güvenlik notu**:
+  Her başarısız doğrulama kartın PIN sayacını harcar (KamuSM kartlarında
+  tipik 3 deneme sonrası kilitlenir, PUK reset gerektirir) — frontend
+  ASLA otomatik retry yapmamalı, kullanıcıya açık uyarı göstermelidir.
+
+### Changed
+
+- **`GET /smartcard/certificate` — `id` semantiği X.509 serial'e geçti, yeni
+  `label` alanı eklendi (BREAKING — REST wire contract)**: Yanıt
+  modelindeki (`CertificateResponse`) `id` alanı artık sertifikanın **X.509
+  serial number'ı** (hex, alt çizgi/boşluk yok) ile dolar — daha önce
+  PKCS#11 alias'ı (CKA_LABEL) dönüyordu. Eski alias değeri yeni eklenen
+  `label` alanında dönmeye devam eder. Aynı serial değeri, geriye uyumluluk
+  için var olan `x509SerialNumber` alanında da görünür (frontend bu alana
+  binding yapan kod bozulmaz). Frontend rehberi: dropdown / liste
+  görünümünde kullanıcıya `label` (insan-okur etiket) gösterin, `id` /
+  `x509SerialNumber` (kanonik kimlik) ise imzalama uçlarına
+  `certificateId` olarak gönderilmek üzere saklanmalıdır. Eşzamanlı olarak
+  `POST /pades/sign`, `POST /xades/sign`, `POST /gibApplication` uçlarının
+  `certificateId` alan açıklamaları yeni semantiğe (önce serial, geriye
+  uyumluluk için alias) göre güncellendi. `POST /gibApplication`'da
+  sertifika eşleştirmesi artık `id` (serial) **veya** `label` (alias)
+  üzerinden case-insensitive yapılır — yani serial'e geçmemiş frontend'ler
+  `label` değerini gönderdiğinde yine eşleşir; `/pades/sign` ve
+  `/xades/sign` zaten `Pkcs11Session.resolveAlias` üzerinden alias /
+  serial / `0x...` öneki / büyük-küçük harf farkını tolere ediyordu.
+  Migration: frontend `cert.id` referansını `cert.label`'a (gösterim için)
+  ve `cert.id` (yeni serial değeri) `certificateId` payload'ına (imzalama
+  için) ayrıştırmalıdır.
+
+### Fixed
+
+- **`POST /smartcard/pin/validate` — yanlış PIN durumunda artık `PKCS11_PIN_INCORRECT`
+  + `pkcs11Code: "CKR_PIN_INCORRECT"` dönüyor (regression düzeltmesi, REST wire
+  contract genişlemesi)**: Eski davranışta `Pkcs11Session.open` sadece üst
+  seviye `IOException("load failed")` mesajına bakıyordu; gerçek
+  `sun.security.pkcs11.wrapper.PKCS11Exception("CKR_PIN_INCORRECT")` 3 katman
+  derinlikteki cause zincirinde gizli kalıyordu. "load failed" string'i
+  PIN-heuristic match'ine düşmediği için yanlış PIN bile `503
+  PKCS11_UNAVAILABLE / "PKCS#11 keystore yüklenemedi: load failed"` olarak
+  dönüyordu — frontend yanlış PIN ile sürücü hatasını ayırt edemiyordu, kart
+  kilitlenme uyarısı da gösterilemiyordu. Çözüm: yeni `services.keystore.Pkcs11Errors`
+  helper'ı cause zincirini gezerek PKCS11Exception'ın `CKR_xxx` sembolik koduna
+  ulaşıyor (PKCS#11 v2.40 §A "Return Values"), ardından bilinen kodları yapısal
+  bir `Outcome`'a (`PIN_INCORRECT`, `PIN_LOCKED`, `PIN_EXPIRED`,
+  `PIN_INVALID_FORMAT`, `SESSION_BUSY`, `DEVICE_REMOVED`, `UNKNOWN`) eşliyor.
+  `Pkcs11AuthException` artık `pkcs11Code`, `locked`, `attemptsRemainingHint`
+  alanları taşır; `ErrorModel`'e karşılık olarak `pkcs11Code`, `pinLocked`,
+  `pinAttemptsRemainingHint` alanları eklendi (NON_NULL ile sadece ilgili
+  hatalarda görünür, geri uyumlu). HTTP statü davranışı: `PIN_INCORRECT` → `401`,
+  `PIN_LOCKED` → **`423 LOCKED` (RFC 4918)** + `pinLocked: true` +
+  `pinAttemptsRemainingHint: "0"` — frontend bu kombinasyonla PIN alanını disable
+  edip "PUK ile sıfırlamanız gerek" mesajı gösterebilir; `PIN_EXPIRED` → `401`,
+  `DEVICE_REMOVED` → `503 PKCS#11 cihaz hatası (CKR_TOKEN_NOT_PRESENT)` mesajı.
+  Bilinmeyen `CKR_VENDOR_*` kodları yine de `503 PKCS11_UNAVAILABLE`'a düşer fakat
+  mesaj artık CKR sembolünü içerir (operasyon ekibi tanı kabiliyeti). Eski 1-arg
+  / 2-arg `Pkcs11AuthException` constructor'ları korundu, mevcut
+  `errorCode=PKCS11_AUTH_FAILED` davranışı default. **Frontend rehberi**: hata
+  yanıtı geldiğinde önce `pinLocked`'a bak — true ise PIN input'u disable et,
+  retry'a izin verme; sonra `code`'a bak (`PKCS11_PIN_INCORRECT` retry OK,
+  `PKCS11_PIN_LOCKED` PUK reset, `PKCS11_PIN_EXPIRED` out-of-band yenile,
+  `PKCS11_PIN_INVALID_FORMAT` PIN format kuralları göster). Otomatik retry
+  ASLA — her başarısız deneme PIN sayacını harcar. Frontend için "kalan deneme
+  sayısı" bilgisi şu anda sadece `0` (kilitli) veya null döner; ileride
+  `CKF_USER_PIN_FINAL_TRY` / `CKF_USER_PIN_COUNT_LOW` token bayrakları
+  okunarak `"1"` / `"low"` ipuçları eklenebilir (vendor-bağımsız PKCS#11 v2.20+
+  flag'leri). Kapsam: aynı zenginleştirilmiş mapping `Pkcs11Session.getPrivateKey`
+  yolunda da aktif — imzalama akışı sırasında PIN session timeout'u olursa
+  tutarlı hata sözleşmesi sağlar.
+- **`GET /smartcard/certificate` — Revocation kontrolü artık AIA ile
+  tamamlanmış zincir üzerinden çalışıyor (davranış düzeltmesi)**: KamuSM
+  kartlarının token'ında genellikle yalnız end-entity sertifika yazılı
+  olduğundan, listeleme akışı `RevocationChecker`'a yalnız leaf içeren bir
+  zincir geçiyordu. `RevocationChecker.findIssuer` issuer bulamayınca
+  OCSP/CRL'i atlıyor ve `status=UNKNOWN` dönüyordu — kullanıcının "geçerli"
+  bir kartı UI'da revocation alanı şüpheli görünüyordu. Çözüm:
+  `CertificateListingService` artık `CertificateChainBuilder`'ı (önceden
+  yalnız `PadesService` / `XadesService`'in kullandığı AIA-takipli zincir
+  inşacı) inject ediyor; her sertifika için token-bundle'dan inşa edilen
+  kısmî zinciri AIA `caIssuers` URL'leriyle root CA'ya kadar genişletiyor
+  ve `RevocationChecker`'a bu tam zinciri veriyor. Artık KamuSM cert'i
+  için OCSP yanıtı alındığında `status=ACTIVE` (veya `REVOKED`) doğru
+  şekilde set edilir. `valid` (zamansal pencere) alanı bu değişimden
+  etkilenmez — zaten OCSP/CRL'den bağımsız çalışıyordu. AIA HTTP timeout
+  / hata durumlarında `CertificateChainBuilder` mevcut zincirle sessizce
+  devam ettiği için listeleme akışı bozulmaz; en kötü ihtimalle eski
+  davranışa düşer (`status=UNKNOWN`). Performans: tipik kart için ek
+  ~1-2 HTTP GET (her biri 3 sn timeout cap), karta bağlı 0.5-1.5 sn
+  ek listeleme süresi.
+
 ## [1.0.3] — 2026-05-28
 
 ## [1.0.2] — 2026-05-26
