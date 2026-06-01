@@ -7,10 +7,10 @@
 
 <!-- LATEST_RELEASE:BEGIN -->
 
-> **Son sürüm — [`v1.0.5`](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v1.0.5)** ·
-> Doğrudan indir: [`mersel-dss-agent-signer-api-1.0.5.jar`](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.5/mersel-dss-agent-signer-api-1.0.5.jar) ·
-> [SHA-256](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.5/SHA256SUMS.txt) ·
-> [SBOM](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.5/mersel-dss-agent-signer-api-1.0.5-bom.json) ·
+> **Son sürüm — [`v1.0.6`](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v1.0.6)** ·
+> Doğrudan indir: [`mersel-dss-agent-signer-api-1.0.6.jar`](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.6/mersel-dss-agent-signer-api-1.0.6.jar) ·
+> [SHA-256](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.6/SHA256SUMS.txt) ·
+> [SBOM](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/download/v1.0.6/mersel-dss-agent-signer-api-1.0.6-bom.json) ·
 > [Tüm sürümler](https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases)
 
 <!-- LATEST_RELEASE:END -->
