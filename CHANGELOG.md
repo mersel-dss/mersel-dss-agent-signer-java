@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-06-01
+
 ### Added
 
 - **`GET /smartcard/certificate` — `CertificateResponse.valid` alanı
@@ -731,7 +733,8 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/releases/tag/v1.0.1
