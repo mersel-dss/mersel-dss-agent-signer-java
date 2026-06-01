@@ -48,10 +48,32 @@ import io.swagger.v3.oas.models.info.License;
 /**
  * Web katmanı yapılandırması: CORS politikası + OpenAPI metadata.
  *
- * <p>Daemon yerel makinede çalıştığı için varsayılan CORS politikası yalnızca <em>loopback</em>
- * origin'lerine açıktır. Ek origin'ler {@code mersel.signer.cors-allowed-origins} ile (virgülle
- * ayrılmış pattern listesi) tanımlanır; her pattern Spring'in {@code addAllowedOriginPatterns}
- * sözdizimini ({@code *} wildcard'lı) kullanır.
+ * <h2>CORS politikası</h2>
+ *
+ * <p>Akıllı kart imzalayıcı bir <em>desktop daemon</em>'dur ve farklı domain'lerdeki müşteri
+ * uygulamalarından (B2B web portalleri, e-fatura paneli, ön muhasebe uygulamaları, vs.)
+ * çağrılır — bu sektörün yerleşik beklentisidir. Bu nedenle <strong>varsayılan politika tüm
+ * origin'lere açıktır</strong> ({@code allowedOriginPatterns="*"}).
+ *
+ * <p>Sıkılaştırmak isteyen kurumsal kurulumlar {@code mersel.signer.cors-allowed-origins}
+ * property'siyle (virgülle ayrılmış pattern listesi, Spring {@code addAllowedOriginPatterns}
+ * sözdizimi — {@code https://*.example.com} gibi wildcard'lı) sınırlama getirebilir; bu durumda
+ * yalnız listedeki origin'ler kabul edilir.
+ *
+ * <h2>Güvenlik notu</h2>
+ *
+ * <p>Açık CORS, daemon'ın kendisini "savunmasız" yapmaz çünkü hassas işlemler (sign / pin
+ * validate) zaten kullanıcının PIN'ini gerektirir; PIN client tarafından her istekte gönderilir.
+ * Ancak iki noktayı bilmek gerekir:
+ *
+ * <ol>
+ *   <li>{@code GET /smartcard/certificate} sertifika listesini (TC kimlik / VKN, ad soyad)
+ *       PIN'siz döner. Açık CORS'la birlikte herhangi bir kötücül site bunu okuyabilir. Aşağıdaki
+ *       Host header savunması bu yüzden öneriyor.
+ *   <li>DNS rebinding saldırısı (evil.com → 127.0.0.1) CORS'u atlar; klasik mitigation
+ *       <em>Host header allowlist</em> uygulamaktır ({@code localhost}, {@code 127.0.0.1},
+ *       {@code [::1]}). Şu an aktif değil; ileride filter eklenebilir.
+ * </ol>
  *
  * <p>OpenAPI {@code info} bloğu sürüm bilgisini {@link VersionProvider}'dan okur (MANIFEST.MF →
  * pom.properties → fallback); lisans bilgisi proje kök dizinindeki {@code LICENSE} dosyasındaki
@@ -60,13 +82,13 @@ import io.swagger.v3.oas.models.info.License;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-  private static final List<String> DEFAULT_LOOPBACK_PATTERNS =
-      Collections.unmodifiableList(
-          Arrays.asList(
-              "http://localhost:*",
-              "https://localhost:*",
-              "http://127.0.0.1:*",
-              "https://127.0.0.1:*"));
+  /**
+   * Varsayılan: her origin kabul edilir. Spring 5.3+ {@code allowedOriginPatterns} pattern'ı
+   * {@code *} ile kullanıldığında {@code allowCredentials=true} ile birlikte de çalışır —
+   * gelen {@code Origin} header'ı response'a yansıtılır (literal {@code *} değil).
+   */
+  static final List<String> DEFAULT_OPEN_PATTERNS =
+      Collections.unmodifiableList(Arrays.asList("*"));
 
   private static final String LICENSE_NAME = "Apache-2.0 WITH LicenseRef-Mersel-Brand-Attribution";
   private static final String LICENSE_URL =
@@ -96,6 +118,9 @@ public class WebConfig implements WebMvcConfigurer {
 
   @Override
   public void addCorsMappings(CorsRegistry registry) {
+    // {@code allowedOriginPatterns("*")} + {@code allowCredentials(true)} kombinasyonu Spring
+    // 5.3+'ta legaldir; framework gelen Origin'i response'ta birebir yansıtır (literal {@code *}
+    // değil). Bu sayede browser cookie/credential gönderebileceği halde response kabul eder.
     registry
         .addMapping("/**")
         .allowedOriginPatterns(allowedOriginPatterns.toArray(new String[0]))
@@ -121,15 +146,26 @@ public class WebConfig implements WebMvcConfigurer {
                 .license(new License().name(LICENSE_NAME).url(LICENSE_URL)));
   }
 
-  private static List<String> parsePatterns(String csv) {
+  /**
+   * CSV {@code mersel.signer.cors-allowed-origins} değerini pattern listesine çevirir.
+   *
+   * <p>Boş / null / yalnız whitespace giriş → {@link #DEFAULT_OPEN_PATTERNS} (her origin). Geçerli
+   * entry'ler (boş olmayan, trim'lenmiş) varsa onlar kullanılır; tüm entry'ler boşsa yine default'a
+   * düşülür. Bu davranış sayesinde admin {@code mersel.signer.cors-allowed-origins=https://app.example.com}
+   * gibi tek pattern verirse <em>sadece</em> o origin geçer; geri kalanı reddeder.
+   *
+   * <p>Test edilebilirlik için package-private static; test sınıfı default fallback ve CSV
+   * parsing davranışını doğrulayabilir.
+   */
+  static List<String> parsePatterns(String csv) {
     if (StringUtils.isBlank(csv)) {
-      return DEFAULT_LOOPBACK_PATTERNS;
+      return DEFAULT_OPEN_PATTERNS;
     }
     List<String> parsed =
         Arrays.stream(csv.split(","))
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
-    return parsed.isEmpty() ? DEFAULT_LOOPBACK_PATTERNS : parsed;
+    return parsed.isEmpty() ? DEFAULT_OPEN_PATTERNS : parsed;
   }
 }

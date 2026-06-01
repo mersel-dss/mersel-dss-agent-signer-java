@@ -30,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import io.mersel.dss.agent.api.services.update.VersionProvider;
@@ -65,6 +67,36 @@ class WebConfigTest {
         .isEqualTo("Apache-2.0 WITH LicenseRef-Mersel-Brand-Attribution");
     assertThat(openApi.getInfo().getLicense().getUrl())
         .isEqualTo("https://github.com/mersel-dss/mersel-dss-agent-signer-java/blob/main/LICENSE");
+  }
+
+  @Test
+  void corsDefaultIsOpenToAllOrigins_whenPropertyIsBlank() {
+    // Property verilmediğinde / boş geldiğinde: agent yerel masaüstü daemon olarak çalıştığı ve
+    // farklı domain'lerdeki müşteri uygulamalarından çağrılması beklendiği için her origin
+    // kabul edilmelidir. Aksi halde curl Origin: https://example.com → 403 "Invalid CORS request"
+    // dönüyordu (eski regression).
+    assertThat(WebConfig.parsePatterns("")).containsExactly("*");
+    assertThat(WebConfig.parsePatterns(null)).containsExactly("*");
+    assertThat(WebConfig.parsePatterns("   ")).containsExactly("*");
+    assertThat(WebConfig.parsePatterns(",,")).containsExactly("*");
+  }
+
+  @Test
+  void corsTighteningViaPropertyOverridesDefault() {
+    // Kurumsal kurulum sıkılaştırma: CSV listesi → sadece o pattern'lar. Default'a düşmemeli.
+    List<String> single = WebConfig.parsePatterns("https://app.example.com");
+    assertThat(single).containsExactly("https://app.example.com");
+
+    List<String> multiple =
+        WebConfig.parsePatterns("https://*.example.com, http://localhost:*, https://imza.tr");
+    assertThat(multiple)
+        .containsExactly("https://*.example.com", "http://localhost:*", "https://imza.tr");
+  }
+
+  @Test
+  void corsParsingTrimsAndDropsEmptyEntries() {
+    List<String> result = WebConfig.parsePatterns("  https://a.com  ,, https://b.com  ");
+    assertThat(result).containsExactly("https://a.com", "https://b.com");
   }
 
   @Test
