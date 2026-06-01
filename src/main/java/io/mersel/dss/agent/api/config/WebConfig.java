@@ -51,9 +51,9 @@ import io.swagger.v3.oas.models.info.License;
  * <h2>CORS politikası</h2>
  *
  * <p>Akıllı kart imzalayıcı bir <em>desktop daemon</em>'dur ve farklı domain'lerdeki müşteri
- * uygulamalarından (B2B web portalleri, e-fatura paneli, ön muhasebe uygulamaları, vs.)
- * çağrılır — bu sektörün yerleşik beklentisidir. Bu nedenle <strong>varsayılan politika tüm
- * origin'lere açıktır</strong> ({@code allowedOriginPatterns="*"}).
+ * uygulamalarından (B2B web portalleri, e-fatura paneli, ön muhasebe uygulamaları, vs.) çağrılır —
+ * bu sektörün yerleşik beklentisidir. Bu nedenle <strong>varsayılan politika tüm origin'lere
+ * açıktır</strong> ({@code allowedOriginPatterns="*"}).
  *
  * <p>Sıkılaştırmak isteyen kurumsal kurulumlar {@code mersel.signer.cors-allowed-origins}
  * property'siyle (virgülle ayrılmış pattern listesi, Spring {@code addAllowedOriginPatterns}
@@ -62,17 +62,17 @@ import io.swagger.v3.oas.models.info.License;
  *
  * <h2>Güvenlik notu</h2>
  *
- * <p>Açık CORS, daemon'ın kendisini "savunmasız" yapmaz çünkü hassas işlemler (sign / pin
- * validate) zaten kullanıcının PIN'ini gerektirir; PIN client tarafından her istekte gönderilir.
- * Ancak iki noktayı bilmek gerekir:
+ * <p>Açık CORS, daemon'ın kendisini "savunmasız" yapmaz çünkü hassas işlemler (sign / pin validate)
+ * zaten kullanıcının PIN'ini gerektirir; PIN client tarafından her istekte gönderilir. Ancak iki
+ * noktayı bilmek gerekir:
  *
  * <ol>
- *   <li>{@code GET /smartcard/certificate} sertifika listesini (TC kimlik / VKN, ad soyad)
- *       PIN'siz döner. Açık CORS'la birlikte herhangi bir kötücül site bunu okuyabilir. Aşağıdaki
- *       Host header savunması bu yüzden öneriyor.
- *   <li>DNS rebinding saldırısı (evil.com → 127.0.0.1) CORS'u atlar; klasik mitigation
- *       <em>Host header allowlist</em> uygulamaktır ({@code localhost}, {@code 127.0.0.1},
- *       {@code [::1]}). Şu an aktif değil; ileride filter eklenebilir.
+ *   <li>{@code GET /smartcard/certificate} sertifika listesini (TC kimlik / VKN, ad soyad) PIN'siz
+ *       döner. Açık CORS'la birlikte herhangi bir kötücül site bunu okuyabilir. Aşağıdaki Host
+ *       header savunması bu yüzden öneriyor.
+ *   <li>DNS rebinding saldırısı (evil.com → 127.0.0.1) CORS'u atlar; klasik mitigation <em>Host
+ *       header allowlist</em> uygulamaktır ({@code localhost}, {@code 127.0.0.1}, {@code [::1]}).
+ *       Şu an aktif değil; ileride filter eklenebilir.
  * </ol>
  *
  * <p>OpenAPI {@code info} bloğu sürüm bilgisini {@link VersionProvider}'dan okur (MANIFEST.MF →
@@ -83,9 +83,9 @@ import io.swagger.v3.oas.models.info.License;
 public class WebConfig implements WebMvcConfigurer {
 
   /**
-   * Varsayılan: her origin kabul edilir. Spring 5.3+ {@code allowedOriginPatterns} pattern'ı
-   * {@code *} ile kullanıldığında {@code allowCredentials=true} ile birlikte de çalışır —
-   * gelen {@code Origin} header'ı response'a yansıtılır (literal {@code *} değil).
+   * Varsayılan: her origin kabul edilir. Spring 5.3+ {@code allowedOriginPatterns} pattern'ı {@code
+   * *} ile kullanıldığında {@code allowCredentials=true} ile birlikte de çalışır — gelen {@code
+   * Origin} header'ı response'a yansıtılır (literal {@code *} değil).
    */
   static final List<String> DEFAULT_OPEN_PATTERNS =
       Collections.unmodifiableList(Arrays.asList("*"));
@@ -151,11 +151,12 @@ public class WebConfig implements WebMvcConfigurer {
    *
    * <p>Boş / null / yalnız whitespace giriş → {@link #DEFAULT_OPEN_PATTERNS} (her origin). Geçerli
    * entry'ler (boş olmayan, trim'lenmiş) varsa onlar kullanılır; tüm entry'ler boşsa yine default'a
-   * düşülür. Bu davranış sayesinde admin {@code mersel.signer.cors-allowed-origins=https://app.example.com}
-   * gibi tek pattern verirse <em>sadece</em> o origin geçer; geri kalanı reddeder.
+   * düşülür. Bu davranış sayesinde admin {@code
+   * mersel.signer.cors-allowed-origins=https://app.example.com} gibi tek pattern verirse
+   * <em>sadece</em> o origin geçer; geri kalanı reddeder.
    *
-   * <p>Test edilebilirlik için package-private static; test sınıfı default fallback ve CSV
-   * parsing davranışını doğrulayabilir.
+   * <p>Test edilebilirlik için package-private static; test sınıfı default fallback ve CSV parsing
+   * davranışını doğrulayabilir.
    */
   static List<String> parsePatterns(String csv) {
     if (StringUtils.isBlank(csv)) {
