@@ -56,8 +56,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Bu testin asıl amacı: KamuSM kartlarında token üzerinde sadece end-entity yazılı senaryoyu
  * regression test etmek. Eski davranış: {@code buildChainFromBundle} leaf-only chain dönüyordu →
- * {@link RevocationChecker#findIssuer} null buluyor → status=UNKNOWN. Yeni davranış: chain
- * AIA üzerinden tamamlanıyor → issuer bulunuyor → OCSP/CRL çalışıyor.
+ * {@link RevocationChecker#findIssuer} null buluyor → status=UNKNOWN. Yeni davranış: chain AIA
+ * üzerinden tamamlanıyor → issuer bulunuyor → OCSP/CRL çalışıyor.
  *
  * <p>{@link CertificateChainBuilder} mock'lanır; gerçek HTTP çıkışı tetiklenmez.
  */

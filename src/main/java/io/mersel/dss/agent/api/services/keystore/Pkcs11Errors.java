@@ -32,8 +32,8 @@ import java.util.Map;
 
 /**
  * SunPKCS11'in fırlattığı sarmalanmış {@link java.io.IOException}'lar içinden orijinal {@code
- * sun.security.pkcs11.wrapper.PKCS11Exception}'ı bulup PKCS#11 v2.40 §A "Return Values" tablosundaki
- * {@code CKR_xxx} sembolik koduna dönüştüren yardımcı.
+ * sun.security.pkcs11.wrapper.PKCS11Exception}'ı bulup PKCS#11 v2.40 §A "Return Values"
+ * tablosundaki {@code CKR_xxx} sembolik koduna dönüştüren yardımcı.
  *
  * <p>Tipik sarmalama (JDK 1.8'de {@code KeyStore.PKCS11.load()} → {@code C_Login} yolu):
  *
@@ -50,8 +50,8 @@ import java.util.Map;
  * mesaj string'i üzerinden iş görüyor (JDK iç paket erişim ihtiyacı yok).
  *
  * <p>{@link #classify(Throwable)} bilinen PIN-ilişkili kodları yapısal {@link Outcome} olarak
- * döndürür; bilinmeyen kodlar için {@code outcome.kind == Kind.UNKNOWN} olur ve çağıran kod
- * {@code Pkcs11LibraryException} fırlatabilir.
+ * döndürür; bilinmeyen kodlar için {@code outcome.kind == Kind.UNKNOWN} olur ve çağıran kod {@code
+ * Pkcs11LibraryException} fırlatabilir.
  */
 public final class Pkcs11Errors {
 
@@ -86,7 +86,8 @@ public final class Pkcs11Errors {
       if (PKCS11_EXCEPTION_FQN.equals(cur.getClass().getName())) {
         String msg = cur.getMessage();
         if (msg != null) {
-          // PKCS11Exception.toString() bazen "CKR_xxx (0x00000060)" döndürür; sadece ilk token'ı al.
+          // PKCS11Exception.toString() bazen "CKR_xxx (0x00000060)" döndürür; sadece ilk token'ı
+          // al.
           String token = msg.trim();
           int sp = token.indexOf(' ');
           if (sp > 0) {
@@ -239,10 +240,10 @@ public final class Pkcs11Errors {
     }
 
     /**
-     * Frontend için kullanıcı dostu deneme hakkı ipucu. Şu anda yalnız {@code "0"} (kilitli)
-     * döner. PKCS#11 v2.20 {@code CKF_USER_PIN_FINAL_TRY} / {@code CKF_USER_PIN_COUNT_LOW}
-     * bayraklarını okuyup {@code "1"} / {@code "low"} döndürmek için ileride {@code C_GetTokenInfo}
-     * reflection entegrasyonu eklenebilir.
+     * Frontend için kullanıcı dostu deneme hakkı ipucu. Şu anda yalnız {@code "0"} (kilitli) döner.
+     * PKCS#11 v2.20 {@code CKF_USER_PIN_FINAL_TRY} / {@code CKF_USER_PIN_COUNT_LOW} bayraklarını
+     * okuyup {@code "1"} / {@code "low"} döndürmek için ileride {@code C_GetTokenInfo} reflection
+     * entegrasyonu eklenebilir.
      */
     public String getAttemptsRemainingHint() {
       return attemptsRemainingHint;

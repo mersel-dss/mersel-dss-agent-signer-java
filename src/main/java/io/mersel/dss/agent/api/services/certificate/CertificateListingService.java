@@ -172,10 +172,10 @@ public class CertificateListingService {
   }
 
   /**
-   * Token'dan inşa edilen kısmî zinciri AIA (Authority Information Access) extension üzerinden
-   * kök CA'ya kadar tamamlamayı dener. {@link CertificateChainBuilder} self-signed root'a varınca
-   * durur, network hatasında sessizce mevcut zincirle devam eder; bu yüzden başarısızlık riski
-   * yok — en kötü ihtimalle gelen zincir aynen geri döner.
+   * Token'dan inşa edilen kısmî zinciri AIA (Authority Information Access) extension üzerinden kök
+   * CA'ya kadar tamamlamayı dener. {@link CertificateChainBuilder} self-signed root'a varınca
+   * durur, network hatasında sessizce mevcut zincirle devam eder; bu yüzden başarısızlık riski yok
+   * — en kötü ihtimalle gelen zincir aynen geri döner.
    *
    * <p>Listeleme akışı boyunca her sertifika için ayrı AIA çağrısı yapılır; KamuSM kartlarında
    * genellikle 1-2 ara CA + 1 root indirilir (toplam ~2-3 HTTP, timeout 3sn × 3). Cache eklemek
@@ -356,14 +356,13 @@ public class CertificateListingService {
    * notBefore <= now <= notAfter} kontrolü. Network'siz, deterministik; OCSP/CRL durumundan
    * <b>bağımsız</b>.
    *
-   * <p>Tasarım gerekçesi: KamuSM kartlarında token'a yazılı sertifika zincirinde issuer cert
-   * eksik kalabiliyor (özellikle eski kartlar yalnız leaf yazıyor); bu durumda {@link
-   * RevocationChecker} {@code UNKNOWN} döndürür. Eski sürümde {@code valid = (status == ACTIVE)}
-   * olduğundan, OCSP'i bağlanamayan veya issuer'ı eksik olan tamamen sağlam bir cert {@code
-   * valid=false} görünüyordu. Frontend bu kullanıcının "geçerli sertifikam var ama UI bana yok
-   * diyor" şikayetiyle karşılaşıyordu. Yeni sözleşme: {@code valid} <b>yalnız</b> süre kontrolü
-   * yapar. Revocation durumunu kullanıcıya göstermek isteyen frontend hâlâ {@code status} alanını
-   * okuyabilir.
+   * <p>Tasarım gerekçesi: KamuSM kartlarında token'a yazılı sertifika zincirinde issuer cert eksik
+   * kalabiliyor (özellikle eski kartlar yalnız leaf yazıyor); bu durumda {@link RevocationChecker}
+   * {@code UNKNOWN} döndürür. Eski sürümde {@code valid = (status == ACTIVE)} olduğundan, OCSP'i
+   * bağlanamayan veya issuer'ı eksik olan tamamen sağlam bir cert {@code valid=false} görünüyordu.
+   * Frontend bu kullanıcının "geçerli sertifikam var ama UI bana yok diyor" şikayetiyle
+   * karşılaşıyordu. Yeni sözleşme: {@code valid} <b>yalnız</b> süre kontrolü yapar. Revocation
+   * durumunu kullanıcıya göstermek isteyen frontend hâlâ {@code status} alanını okuyabilir.
    *
    * @return cert null değil, notBefore geçmiş ve notAfter henüz dolmamışsa {@code true}
    */

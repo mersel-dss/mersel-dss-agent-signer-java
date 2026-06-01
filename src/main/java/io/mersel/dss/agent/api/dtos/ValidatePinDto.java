@@ -35,8 +35,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>Frontend'in (özellikle giriş ekranı) PIN'i imzalama akışına geçmeden önce ucuz bir{@code
  * C_Login}+{@code C_Logout} ile doğrulamasını sağlar. Pin doğru ise 200 + {@code
- * PinValidationResponse} döner; yanlış ise standart {@code 401 PKCS11_AUTH_FAILED}
- * ({@code ErrorModel}) döner.
+ * PinValidationResponse} döner; yanlış ise standart {@code 401 PKCS11_AUTH_FAILED} ({@code
+ * ErrorModel}) döner.
  *
  * <p><b>Dikkat:</b> Bu uç gerçek {@code C_Login} yapar — yanlış denemeler kartın PIN sayacını
  * harcar (KamuSM kartlarında tipik 3 deneme; PIN kilitlenirse PUK ile reset gerekir). Frontend

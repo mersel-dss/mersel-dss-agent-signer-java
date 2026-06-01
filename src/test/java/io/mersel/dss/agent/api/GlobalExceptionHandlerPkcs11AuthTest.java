@@ -39,8 +39,8 @@ import io.mersel.dss.agent.api.models.ErrorModel;
  * {@link GlobalExceptionHandler#handlePkcs11Auth} yapısal alan + HTTP statü davranışı.
  *
  * <p>Frontend kontratını korumak için: legacy 1-arg ctor → 401 + {@code PKCS11_AUTH_FAILED};
- * yapısal ctor (PIN_INCORRECT) → 401 + structured fields; locked → {@code 423 LOCKED} +
- * {@code pinLocked=true} + {@code pinAttemptsRemainingHint="0"}.
+ * yapısal ctor (PIN_INCORRECT) → 401 + structured fields; locked → {@code 423 LOCKED} + {@code
+ * pinLocked=true} + {@code pinAttemptsRemainingHint="0"}.
  */
 class GlobalExceptionHandlerPkcs11AuthTest {
 

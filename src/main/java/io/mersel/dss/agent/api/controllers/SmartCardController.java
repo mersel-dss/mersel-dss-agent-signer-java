@@ -188,10 +188,7 @@ public class SmartCardController {
       @Valid @RequestBody ValidatePinDto body) {
     SmartCardPinValidator.ValidationResult result =
         pinValidator.validate(
-            body.getTerminalName(),
-            body.getPin(),
-            body.getPkcs11LibraryPath(),
-            body.getCardType());
+            body.getTerminalName(), body.getPin(), body.getPkcs11LibraryPath(), body.getCardType());
     Path lib = result.getPkcs11LibraryPath();
     return ResponseEntity.ok(
         new PinValidationResponse(

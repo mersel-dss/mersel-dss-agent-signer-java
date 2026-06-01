@@ -175,9 +175,7 @@ public final class Pkcs11Session implements AutoCloseable {
   static RuntimeException mapKeyStoreLoadFailure(Throwable loadFail) {
     Pkcs11Errors.Outcome outcome = Pkcs11Errors.classify(loadFail);
     String topMsg =
-        loadFail.getMessage() == null
-            ? loadFail.getClass().getSimpleName()
-            : loadFail.getMessage();
+        loadFail.getMessage() == null ? loadFail.getClass().getSimpleName() : loadFail.getMessage();
     switch (outcome.getKind()) {
       case PIN_INCORRECT:
       case PIN_LOCKED:
@@ -205,8 +203,7 @@ public final class Pkcs11Session implements AutoCloseable {
       default:
         // Ne PIN koduna ne donanım koduna eşleşmedi — istisnai ama mümkün (eski sürücü, custom
         // CKR_VENDOR_xxx). Eski davranışa düş: PKCS11_UNAVAILABLE ama mesajı CKR ile zenginleştir.
-        String suffix =
-            outcome.getPkcs11Code() == null ? "" : " (" + outcome.getPkcs11Code() + ")";
+        String suffix = outcome.getPkcs11Code() == null ? "" : " (" + outcome.getPkcs11Code() + ")";
         return new Pkcs11LibraryException(
             "PKCS#11 keystore yüklenemedi: " + topMsg + suffix, loadFail);
     }

@@ -35,9 +35,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>{@code valid=true} → kart üzerinde {@code C_Login} başarıyla yapıldı, oturum hemen ardından
  * kapatıldı (sertifika / private key okunmadı). PIN yanlış olduğunda bu uç bu yanıtı
- * <em>döndürmez</em>; standart {@code ErrorModel} ile {@code 401 PKCS11_AUTH_FAILED} döner —
- * yani frontend yalnızca 200 alındığında {@code valid=true} bekler ve farklı bir branch'te 401
- * yakalar.
+ * <em>döndürmez</em>; standart {@code ErrorModel} ile {@code 401 PKCS11_AUTH_FAILED} döner — yani
+ * frontend yalnızca 200 alındığında {@code valid=true} bekler ve farklı bir branch'te 401 yakalar.
  *
  * <p>Yan bilgilerle ({@code terminalName}, {@code cardType}, {@code pkcs11LibraryPath}) frontend
  * cache zenginleştirmesi yapabilir: kullanıcı PIN doğrulamasından sonra aynı {@code cardType}'ı

@@ -48,11 +48,10 @@ import io.mersel.dss.agent.api.services.smartcard.SmartCardPinValidator;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardReaderService;
 
 /**
- * {@link SmartCardController#validatePin(ValidatePinDto)} controller-level davranışı —
- * {@link SmartCardPinValidator}'ın başarılı sonucunun {@link PinValidationResponse}'a doğru
- * map'lendiğini, {@link Pkcs11AuthException}'ın çağıranın görmesi için yutulmadığını
- * (GlobalExceptionHandler 401'e çevirir) ve DTO alanlarının validator'a aynen iletildiğini
- * doğrular.
+ * {@link SmartCardController#validatePin(ValidatePinDto)} controller-level davranışı — {@link
+ * SmartCardPinValidator}'ın başarılı sonucunun {@link PinValidationResponse}'a doğru map'lendiğini,
+ * {@link Pkcs11AuthException}'ın çağıranın görmesi için yutulmadığını (GlobalExceptionHandler 401'e
+ * çevirir) ve DTO alanlarının validator'a aynen iletildiğini doğrular.
  */
 class SmartCardControllerValidatePinTest {
 
@@ -65,9 +64,7 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class),
-            mock(CertificateListingService.class),
-            validator);
+            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -92,9 +89,7 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class),
-            mock(CertificateListingService.class),
-            validator);
+            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -118,9 +113,7 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class),
-            mock(CertificateListingService.class),
-            validator);
+            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -140,9 +133,7 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class),
-            mock(CertificateListingService.class),
-            validator);
+            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");

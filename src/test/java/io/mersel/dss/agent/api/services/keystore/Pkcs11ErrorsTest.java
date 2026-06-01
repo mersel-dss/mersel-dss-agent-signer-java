@@ -42,8 +42,8 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Gerçek {@code sun.security.pkcs11.wrapper.PKCS11Exception} (JDK 1.8 internal) reflection ile
  * inşa edilir; test böylece kullanıcının ekran görüntüsündeki çağrı yığınını birebir taklit eder
- * ({@code IOException → UnrecoverableKeyException → FailedLoginException → PKCS11Exception}).
- * Eğer JDK'ta sınıf bulunamazsa test {@code Assumptions.assumeTrue} ile atlanır.
+ * ({@code IOException → UnrecoverableKeyException → FailedLoginException → PKCS11Exception}). Eğer
+ * JDK'ta sınıf bulunamazsa test {@code Assumptions.assumeTrue} ile atlanır.
  */
 class Pkcs11ErrorsTest {
 
@@ -156,8 +156,7 @@ class Pkcs11ErrorsTest {
     Throwable wrapped = wrapTypicalChain(CKR_USER_ALREADY_LOGGED_IN);
     assumeTrue(wrapped != null, "JDK'ta PKCS11Exception yok, test atlandı");
 
-    assertThat(Pkcs11Errors.classify(wrapped).getKind())
-        .isEqualTo(Pkcs11Errors.Kind.SESSION_BUSY);
+    assertThat(Pkcs11Errors.classify(wrapped).getKind()).isEqualTo(Pkcs11Errors.Kind.SESSION_BUSY);
   }
 
   @Test
@@ -168,8 +167,7 @@ class Pkcs11ErrorsTest {
 
     assertThat(Pkcs11Errors.classify(removed).getKind())
         .isEqualTo(Pkcs11Errors.Kind.DEVICE_REMOVED);
-    assertThat(Pkcs11Errors.classify(hwErr).getKind())
-        .isEqualTo(Pkcs11Errors.Kind.DEVICE_REMOVED);
+    assertThat(Pkcs11Errors.classify(hwErr).getKind()).isEqualTo(Pkcs11Errors.Kind.DEVICE_REMOVED);
   }
 
   @Test
@@ -194,7 +192,9 @@ class Pkcs11ErrorsTest {
 
   /* ---------------- helpers ---------------- */
 
-  /** Tipik SunPKCS11 sarmalaması: IOException ← UnrecoverableKey ← FailedLogin ← PKCS11Exception. */
+  /**
+   * Tipik SunPKCS11 sarmalaması: IOException ← UnrecoverableKey ← FailedLogin ← PKCS11Exception.
+   */
   private static Throwable wrapTypicalChain(long ckrErrorCode) throws Exception {
     Throwable pkcs11Ex = newPkcs11Exception(ckrErrorCode);
     if (pkcs11Ex == null) {

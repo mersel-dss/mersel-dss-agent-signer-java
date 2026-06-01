@@ -84,16 +84,14 @@ class CertificateListingServiceValidityTest {
   @Test
   void nullNotBeforeIsTreatedAsAlwaysValidStartside() {
     // Defensive: cert.getNotBefore() == null → "lower bound yok" varsayımı.
-    X509Certificate cert =
-        cert(null, Date.from(Instant.now().plus(365, ChronoUnit.DAYS)));
+    X509Certificate cert = cert(null, Date.from(Instant.now().plus(365, ChronoUnit.DAYS)));
     assertThat(CertificateListingService.computeValidity(cert)).isTrue();
   }
 
   @Test
   void nullNotAfterIsTreatedAsAlwaysValidEndside() {
     // Defensive: cert.getNotAfter() == null → "upper bound yok" varsayımı.
-    X509Certificate cert =
-        cert(Date.from(Instant.now().minus(30, ChronoUnit.DAYS)), null);
+    X509Certificate cert = cert(Date.from(Instant.now().minus(30, ChronoUnit.DAYS)), null);
     assertThat(CertificateListingService.computeValidity(cert)).isTrue();
   }
 
