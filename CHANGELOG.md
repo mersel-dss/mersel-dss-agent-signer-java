@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-01
+
 ### Fixed
 
 - **XAdES çıktısında `<ds:X509Certificate>` ve `<ds:SignatureValue>` text
@@ -1450,7 +1452,8 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.3...v1.0.4
