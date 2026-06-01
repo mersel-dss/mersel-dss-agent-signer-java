@@ -6,6 +6,34 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Fixed
+
+- **CORS — Varsayılan politika "her origin'e açık" olarak değiştirildi
+  (regression + sektör beklentisi düzeltmesi)**: Eski default sadece loopback
+  origin'lerini (`http(s)://localhost:*`, `http(s)://127.0.0.1:*`) kabul
+  ediyordu; farklı domain'lerden (örn. `https://imzaci.example.com.tr` gibi
+  müşteri portalleri) yapılan herhangi bir cross-origin isteğe Spring CORS
+  işleyicisi `403 "Invalid CORS request"` döndürüyordu — yanıtın gövdesi de
+  boş olduğundan kullanıcılar 403'ü CORS ile ilişkilendirmekte zorlanıyordu.
+  Çözüm: yeni varsayılan `allowedOriginPatterns = "*"` (tüm origin'ler) +
+  `allowCredentials = true`. Spring 5.3+ pattern bazlı wildcard'la credential
+  kombinasyonunu destekler — gelen `Origin` header'ı response'a birebir
+  yansıtılır (literal `*` değil), bu sayede browser cookie / `Authorization`
+  gönderen ileri akışlar da bozulmaz. Davranış sektörün masaüstü imzalayıcı
+  standardıyla uyumlu (ön muhasebe / e-fatura / bordro entegrasyonları farklı
+  domain'lerden bağlanır). Kurumsal sıkılaştırma yolu aynen korundu:
+  `mersel.signer.cors-allowed-origins` property'sine virgülle ayrılmış
+  pattern listesi (örn. `https://*.musteri.com,https://imza.kurum.gov.tr`)
+  verilirse **sadece** o pattern'lar kabul edilir, diğerleri reddedilir.
+  **Güvenlik kapsamı**: hassas işlemler (`POST /pades/sign`,
+  `POST /xades/sign`, `POST /smartcard/pin/validate`) kullanıcının PIN'ini
+  gerektirir ve PIN her istekte client'tan gelir; kötü niyetli site PIN'i
+  bilemez. `GET /smartcard/certificate` PIN'siz çalışır ve TC kimlik /
+  VKN / ad-soyad içerir — açık CORS bunları cross-origin okutabilir.
+  Bu vektörü tamamen kapatmak için ileride **Host header allowlist filter**
+  (DNS rebinding mitigation; `Host` header'ı `localhost` / `127.0.0.1` /
+  `[::1]` değilse 403) eklenebilir; planlanan ek hardening adımı.
+
 ## [1.0.4] — 2026-06-01
 
 ### Added
@@ -71,26 +99,6 @@ standardına dayanır; sürüm numaralandırması
 
 ### Fixed
 
-- **CORS — Varsayılan politika "her origin'e açık" olarak değiştirildi (regression
-  + sektör beklentisi düzeltmesi)**: Eski default sadece loopback origin'lerini
-  ({@code http(s)://localhost:*}, {@code http(s)://127.0.0.1:*}) kabul ediyordu;
-  farklı domain'lerden ({@code https://imzaci.example.com.tr} gibi B2B müşteri
-  portalleri) yapılan herhangi bir cross-origin isteğe Spring CORS işleyicisi
-  {@code 403 "Invalid CORS request"} döndürüyordu — kullanıcılar yanıtı `403`
-  görüp soruna CORS adı veremiyordu, debug uzun sürüyordu. Çözüm: yeni varsayılan
-  {@code allowedOriginPatterns="*"} (tüm origin'ler), {@code allowCredentials=true}
-  ile birlikte kullanılır (Spring 5.3+ pattern-bazlı wildcard'la credential
-  kombinasyonunu destekler — gelen `Origin` response'a yansıtılır, literal {@code *}
-  değil; browser cookie/Authorization gönderebilir). Bu davranış sektörün masaüstü
-  imzalayıcı standardı (ön muhasebe / e-fatura / bordro entegrasyonları her domain'den
-  bağlanır). Kurumsal sıkılaştırma yolu korundu: {@code mersel.signer.cors-allowed-origins}
-  property'sine virgülle ayrılmış pattern listesi (ör. {@code https://*.musteri.com,
-  https://imza.kurum.gov.tr}) verilirse <em>yalnız</em> o pattern'lar kabul edilir,
-  diğerleri reddedilir. **Güvenlik kapsamı**: hassas işlemler (sign, pin/validate)
-  zaten kullanıcının PIN'ini gerektirir; PIN client'tan her istekte gelir.
-  {@code GET /smartcard/certificate} PIN'siz çalışır ve TC kimlik / VKN içerir —
-  açık CORS bunları cross-origin okutabilir; ileride <em>Host header allowlist</em>
-  filter (DNS rebinding mitigation) eklenebilir, planlanan ek hardening.
 - **`POST /smartcard/pin/validate` — yanlış PIN durumunda artık `PKCS11_PIN_INCORRECT`
   + `pkcs11Code: "CKR_PIN_INCORRECT"` dönüyor (regression düzeltmesi, REST wire
   contract genişlemesi)**: Eski davranışta `Pkcs11Session.open` sadece üst
