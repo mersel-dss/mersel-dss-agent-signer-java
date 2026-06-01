@@ -41,7 +41,9 @@ import io.mersel.dss.agent.api.exceptions.Pkcs11AuthException;
 import io.mersel.dss.agent.api.exceptions.Pkcs11LibraryException;
 
 /**
- * Kullanıcının ekran görüntüsündeki regression senaryosunu birebir taklit eder:
+ * {@link Pkcs11Errors#mapKeyStoreLoadFailure(Throwable)} davranışı. {@link Pkcs11ErrorsTest} {@code
+ * classify} + {@code extractCkrCode} metotlarını kapsar; bu test üst seviye exception
+ * saramalamasını ({@code Pkcs11AuthException} / {@code Pkcs11LibraryException}) doğrular.
  *
  * <pre>
  * IOException("load failed")
@@ -54,7 +56,7 @@ import io.mersel.dss.agent.api.exceptions.Pkcs11LibraryException;
  * "yanlış PIN mi network mü?" ayrımını yapamıyordu. Yeni davranış: {@code Pkcs11AuthException}
  * fırlatılır, {@code errorCode = PKCS11_PIN_INCORRECT}, {@code pkcs11Code = CKR_PIN_INCORRECT}.
  */
-class Pkcs11SessionLoadFailureMappingTest {
+class Pkcs11ErrorsLoadFailureMappingTest {
 
   private static final String PKCS11_EX = "sun.security.pkcs11.wrapper.PKCS11Exception";
 
@@ -63,7 +65,7 @@ class Pkcs11SessionLoadFailureMappingTest {
     Throwable load = buildLoadFailure(0xA0L); // CKR_PIN_INCORRECT
     assumeTrue(load != null, "JDK'ta PKCS11Exception yok, test atlandı");
 
-    RuntimeException mapped = Pkcs11Session.mapKeyStoreLoadFailure(load);
+    RuntimeException mapped = Pkcs11Errors.mapKeyStoreLoadFailure(load);
 
     assertThat(mapped).isInstanceOf(Pkcs11AuthException.class);
     Pkcs11AuthException auth = (Pkcs11AuthException) mapped;
@@ -80,7 +82,7 @@ class Pkcs11SessionLoadFailureMappingTest {
     Throwable load = buildLoadFailure(0xA4L); // CKR_PIN_LOCKED
     assumeTrue(load != null, "JDK'ta PKCS11Exception yok, test atlandı");
 
-    RuntimeException mapped = Pkcs11Session.mapKeyStoreLoadFailure(load);
+    RuntimeException mapped = Pkcs11Errors.mapKeyStoreLoadFailure(load);
 
     assertThat(mapped).isInstanceOf(Pkcs11AuthException.class);
     Pkcs11AuthException auth = (Pkcs11AuthException) mapped;
@@ -96,7 +98,7 @@ class Pkcs11SessionLoadFailureMappingTest {
     Throwable load = buildLoadFailure(0xE0L); // CKR_TOKEN_NOT_PRESENT
     assumeTrue(load != null, "JDK'ta PKCS11Exception yok, test atlandı");
 
-    RuntimeException mapped = Pkcs11Session.mapKeyStoreLoadFailure(load);
+    RuntimeException mapped = Pkcs11Errors.mapKeyStoreLoadFailure(load);
 
     assertThat(mapped).isInstanceOf(Pkcs11LibraryException.class);
     assertThat(mapped.getMessage()).contains("CKR_TOKEN_NOT_PRESENT");
@@ -107,7 +109,7 @@ class Pkcs11SessionLoadFailureMappingTest {
     Throwable load = buildLoadFailure(0x80000050L); // CKR_VENDOR_DEFINED bölgesi
     assumeTrue(load != null, "JDK'ta PKCS11Exception yok, test atlandı");
 
-    RuntimeException mapped = Pkcs11Session.mapKeyStoreLoadFailure(load);
+    RuntimeException mapped = Pkcs11Errors.mapKeyStoreLoadFailure(load);
 
     assertThat(mapped).isInstanceOf(Pkcs11LibraryException.class);
     // Bilinmeyen kodlar bile mesajda CKR sembolüne yer açar — operasyon ekibinin tanı
@@ -118,7 +120,7 @@ class Pkcs11SessionLoadFailureMappingTest {
   @Test
   void chainWithoutPkcs11Exception_fallsBackToLibraryException() {
     IOException load = new IOException("disk error");
-    RuntimeException mapped = Pkcs11Session.mapKeyStoreLoadFailure(load);
+    RuntimeException mapped = Pkcs11Errors.mapKeyStoreLoadFailure(load);
 
     // PKCS#11 ile ilgisi yok — generic library hatası.
     assertThat(mapped).isInstanceOf(Pkcs11LibraryException.class);

@@ -77,6 +77,7 @@
     <itext.version>7.2.6</itext.version>
     <itext5.version>5.5.13.5</itext5.version>
     <xades4j.version>1.7.0</xades4j.version>
+    <ipkcs11.version>1.0.9</ipkcs11.version>
     <springdoc.version>1.8.0</springdoc.version>
     <json.version>20260522</json.version>
     <commons-io.version>2.22.0</commons-io.version>
@@ -181,6 +182,56 @@
       <groupId>com.googlecode.xades4j</groupId>
       <artifactId>xades4j</artifactId>
       <version>${xades4j.version}</version>
+    </dependency>
+
+    <!--
+        IAIK PKCS#11 Wrapper — xipki ipkcs11wrapper 1.0.9 (Tem 2024).
+        ===================================================================
+        SunPKCS11 P11KeyStore alias-mapping katmanı bazı kartlarda
+        patolojik davranıyor:
+
+          - NES Bulut / Kamu SM dual-key (SIGN0 imzalama + SIGN1 anahtar
+            uzlaşımı, EC P-384) kartlarında sürücü iki private key'i AYNI
+            CKA_ID attribute'ı ile yazar. JDK 1.8 P11KeyStore#mapPrivateKeys()
+            uniqueness check'i fail eder: "invalid KeyStore state: found 2
+            private keys sharing CKA_ID 0x...". Hata cert seçim mantığına
+            gelmeden KeyStore.load() aşamasında atılır; kullanıcının doğru
+            certificateId verdiği seçim akışı dahi devreye giremez.
+          - JDK 9+ bu davranışı relaxed yaptı, JDK 1.8'de fix yok.
+          - Önceki agent denemesinde sun.security.pkcs11.wrapper.PKCS11
+            internal API'sine reflection ile inip bu katmanı bypass
+            etmiştik; ancak (a) JDK internal API'sine bağımlılık JDK 17+'a
+            geçişte add-exports=jdk.crypto.cryptoki/sun.security.pkcs11.wrapper
+            JVM argümanı gerektirecek, (b) imza akışı için yazdığımız her
+            şey JDK sürüm farklarını tek başımıza yönetmek demek.
+
+        ipkcs11wrapper SunPKCS11 JCA-soyutlama katmanını TAMAMEN by-pass
+        eder; kendi JNI bridge'i (jar içinde bundled libpkcs11wrapper:
+        natives/{unix,windows}/{x86_64,arm,aarch64,...}) ile doğrudan
+        PKCS#11 spec çağrılarını (C_FindObjects / C_Sign / C_Login) yapar.
+        Aynı bağımlılık `mersel-dss-server-signer-java` projesinde HSM
+        akışı (SafeNet ProtectServer K7, Luna) için zaten kullanılıyor —
+        agent geçişi server-agent paritesi sağlar.
+
+        Lisans: xipki kod Apache 2.0; orijinal IAIK Graz kodu BSD tipi
+        5-maddelik (ticari kullanım serbest, "This product includes software
+        developed by IAIK of Graz University of Technology." attribution
+        gerekiyor; LICENSE / NOTICE'da belirtilir).
+
+        JAR boyutu ~2.3 MB; agent shaded JAR'ında %5-8 büyüme, jpackage
+        installer'ında ihmal edilebilir. Tüm platformlar için JNI binary
+        zaten içinde, ek native dosya kopyalamaya gerek yok.
+
+        JDK 17+'a geçildiğinde JVM argümanı GEREKİR (gerçek yazımda baştaki
+        iki tire ile):
+          add-exports=jdk.crypto.cryptoki/sun.security.pkcs11.wrapper=ALL-UNNAMED
+        Agent jpackage launcher konfigürasyonu bunu ekleyecek (jdk-17+ runtime
+        bundle planlandığında).
+    -->
+    <dependency>
+      <groupId>org.xipki</groupId>
+      <artifactId>ipkcs11wrapper</artifactId>
+      <version>${ipkcs11.version}</version>
     </dependency>
 
     <!-- Apache Commons -->

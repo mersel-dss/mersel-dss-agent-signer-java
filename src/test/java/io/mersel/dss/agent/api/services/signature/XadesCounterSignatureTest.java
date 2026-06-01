@@ -95,10 +95,11 @@ class XadesCounterSignatureTest {
     XadesService service =
         new XadesService(
             null,
-            io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder.passthrough());
+            io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder.passthrough(),
+            null);
     byte[] counterSignedXml;
     try (Pkcs11Session session = loaded.openSession()) {
-      counterSignedXml = service.signHrWithSession(session, dto);
+      counterSignedXml = service.signHrWithSession(session, dto, null);
     }
     assertNotNull(counterSignedXml);
 

@@ -29,8 +29,11 @@ package io.mersel.dss.agent.api.services.signature;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Path;
+import java.security.AuthProvider;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
+import java.security.Provider;
+import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
@@ -46,6 +49,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import javax.security.auth.login.LoginException;
 import javax.security.auth.x500.X500Principal;
 import javax.xml.crypto.dom.DOMStructure;
 import javax.xml.crypto.dsig.CanonicalizationMethod;
@@ -68,8 +72,13 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import org.apache.xml.security.Init;
+import org.apache.xml.security.algorithms.JCEMapper;
+import org.apache.xml.security.signature.ObjectContainer;
+import org.apache.xml.security.transforms.Transforms;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -77,14 +86,23 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import io.mersel.dss.agent.api.dtos.SignDocumentDto;
+import io.mersel.dss.agent.api.exceptions.CauseChainExtractor;
 import io.mersel.dss.agent.api.exceptions.SignatureOperationException;
+import io.mersel.dss.agent.api.exceptions.SignerException;
+import io.mersel.dss.agent.api.models.SignatureDiagnostics;
 import io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder;
+import io.mersel.dss.agent.api.services.keystore.BouncyCastleSetup;
+import io.mersel.dss.agent.api.services.keystore.IaikPkcs11Signer;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11Session;
+import io.mersel.dss.agent.api.services.smartcard.SmartCardInfo;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardManager;
+import io.mersel.dss.agent.api.services.smartcard.SmartCardReaderService;
 
 import xades4j.algorithms.EnvelopedSignatureTransform;
+import xades4j.production.BasicSignatureOptions;
 import xades4j.production.DataObjectReference;
 import xades4j.production.SignedDataObjects;
+import xades4j.production.SigningCertificateMode;
 import xades4j.production.XadesBesSigningProfile;
 import xades4j.production.XadesSigner;
 import xades4j.properties.DataObjectDesc;
@@ -150,10 +168,16 @@ public class XadesService {
 
   private final SmartCardManager cardManager;
   private final CertificateChainBuilder chainBuilder;
+  private final SmartCardReaderService readerService;
 
-  public XadesService(SmartCardManager cardManager, CertificateChainBuilder chainBuilder) {
+  @Autowired
+  public XadesService(
+      SmartCardManager cardManager,
+      CertificateChainBuilder chainBuilder,
+      SmartCardReaderService readerService) {
     this.cardManager = cardManager;
     this.chainBuilder = chainBuilder;
+    this.readerService = readerService;
   }
 
   /* ================================================================== */
@@ -169,11 +193,76 @@ public class XadesService {
         dto.getTerminalName(),
         dto.getCertificateId());
 
+    SignatureDiagnostics diag = baseDiagnosticsFor(dto, libraryPath);
     byte[] xmlBytes = readBytes(dto);
     try {
-      return doXadesBesSign(xmlBytes, libraryPath, dto.getCertificateId(), dto.getPin());
+      return doXadesBesSign(xmlBytes, libraryPath, dto.getCertificateId(), dto.getPin(), diag);
+    } catch (SignerException known) {
+      // Resolver veya alt katman zaten yapısal exception fırlatmış. SunPKCS11'in bilinen
+      // patolojilerinden biriyse (CKA_ID collision veya CKR_USER_NOT_LOGGED_IN) IAIK PKCS#11
+      // wrapper fallback'ine düş; aksi halde tanılamayı bağlayıp olduğu gibi yeniden fırlat.
+      if (IaikPkcs11Signer.requiresIaikFallback(known)) {
+        logFallbackReason(known, dto);
+        return doXadesBesSignNativeWithDiag(
+            xmlBytes, libraryPath, dto.getCertificateId(), dto.getPin(), diag, known);
+      }
+      if (known.getDiagnostics() == null) {
+        known.withDiagnostics(diag);
+      }
+      throw known;
     } catch (Exception e) {
-      throw new SignatureOperationException("XAdES-BES imzalama başarısız: " + e.getMessage(), e);
+      if (IaikPkcs11Signer.requiresIaikFallback(e)) {
+        logFallbackReason(e, dto);
+        return doXadesBesSignNativeWithDiag(
+            xmlBytes, libraryPath, dto.getCertificateId(), dto.getPin(), diag, e);
+      }
+      String code = classifySignatureFailure(e);
+      String rootMsg = CauseChainExtractor.rootMessage(e);
+      String msg =
+          "XAdES-BES imzalama başarısız: "
+              + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+              + (rootMsg != null && !rootMsg.equals(e.getMessage()) ? " | root: " + rootMsg : "");
+      throw (SignatureOperationException)
+          new SignatureOperationException(code, msg, e).withDiagnostics(diag);
+    }
+  }
+
+  /**
+   * {@link #doXadesBesSignNative} sarmalayıcısı: native akışı denerken native akış da patarsa, hem
+   * orijinal CKA_ID hatasını hem native başarısızlığı tek bir {@code SignatureOperationException}
+   * altında raporlar; bu sayede destek logları kök neden zincirini görür.
+   */
+  private byte[] doXadesBesSignNativeWithDiag(
+      byte[] xmlBytes,
+      Path libraryPath,
+      String certIdentifier,
+      String pin,
+      SignatureDiagnostics diag,
+      Throwable xades4jFailure) {
+    try {
+      return doXadesBesSignNative(xmlBytes, libraryPath, certIdentifier, pin, diag);
+    } catch (SignerException nativeKnown) {
+      if (nativeKnown.getDiagnostics() == null) {
+        nativeKnown.withDiagnostics(diag);
+      }
+      throw nativeKnown;
+    } catch (Exception nativeFail) {
+      // Native path da çuvalladı — orijinal xades4j hatasını cause olarak suppress et.
+      String code = classifySignatureFailure(nativeFail);
+      String rootMsg = CauseChainExtractor.rootMessage(nativeFail);
+      String msg =
+          "XAdES-BES imzalama başarısız (native fallback de patladı): "
+              + (nativeFail.getMessage() != null
+                  ? nativeFail.getMessage()
+                  : nativeFail.getClass().getSimpleName())
+              + (rootMsg != null && !rootMsg.equals(nativeFail.getMessage())
+                  ? " | root: " + rootMsg
+                  : "");
+      SignatureOperationException sigEx = new SignatureOperationException(code, msg, nativeFail);
+      if (xades4jFailure != null) {
+        sigEx.addSuppressed(xades4jFailure);
+      }
+      throw (SignatureOperationException) sigEx.withDiagnostics(diag);
     }
   }
 
@@ -186,8 +275,66 @@ public class XadesService {
         dto.getTerminalName(),
         dto.getCertificateId());
 
-    try (Pkcs11Session session = Pkcs11Session.open(libraryPath, dto.getPin())) {
-      return signHrWithSession(session, dto);
+    SignatureDiagnostics diag = baseDiagnosticsFor(dto, libraryPath);
+    Pkcs11Session session = null;
+    try {
+      session = Pkcs11Session.open(libraryPath, dto.getPin());
+    } catch (RuntimeException sessionOpenFail) {
+      // Pkcs11Session.open SunPKCS11 P11KeyStore.engineLoad çağırır; SunPKCS11'in bilinen
+      // patolojileri (CKA_ID collision veya CKR_USER_NOT_LOGGED_IN session-scoped login) burada
+      // tetiklenir. Counter-signature için native imza akışı (mevcut <ds:Signature>
+      // SignatureValue'suna injection) ayrı bir refactor gerektiriyor; şimdilik kullanıcıya açık
+      // hata mesajı + remediation veriyoruz.
+      if (IaikPkcs11Signer.requiresIaikFallback(sessionOpenFail)) {
+        log.warn(
+            "Counter-signature: SunPKCS11 patolojisi yüzünden Pkcs11Session açılamadı"
+                + " (terminal={}, certId={}, root={}).",
+            dto.getTerminalName(),
+            dto.getCertificateId(),
+            CauseChainExtractor.rootMessage(sessionOpenFail));
+        mergeWarning(
+            diag,
+            "SunPKCS11 P11KeyStore patolojisi tespit edildi (CKA_ID collision veya"
+                + " CKR_USER_NOT_LOGGED_IN). XAdES counter signature için IAIK PKCS#11 wrapper"
+                + " fallback henüz aktif değil; aynı belge için XAdES-BES enveloped imzayı"
+                + " (/xades/sign) kullanmak fallback üzerinden çalışacaktır.");
+        throw (SignatureOperationException)
+            new SignatureOperationException(
+                    SignatureOperationException.CODE_FAILED,
+                    "XAdES CounterSignature başarısız: SunPKCS11 patolojisi (CKA_ID collision"
+                        + " veya CKR_USER_NOT_LOGGED_IN) counter-signature akışında IAIK fallback"
+                        + " ile henüz desteklenmiyor. /xades/sign endpoint'i bu kart için IAIK"
+                        + " path üzerinden çalışır.",
+                    sessionOpenFail)
+                .withDiagnostics(diag);
+      }
+      throw sessionOpenFail;
+    }
+
+    // try-with-resources yerine explicit try/finally: close() hatası imza body'sini suppress
+    // edip yanlış branch'e (IAIK fallback değerlendirmesine) düşmesin. close hatası sadece
+    // log'lanır, orijinal exception (varsa) korunur.
+    RuntimeException bodyFailure = null;
+    try {
+      return signHrWithSession(session, dto, diag);
+    } catch (RuntimeException re) {
+      bodyFailure = re;
+      if (re instanceof SignerException && ((SignerException) re).getDiagnostics() == null) {
+        ((SignerException) re).withDiagnostics(diag);
+      }
+      throw re;
+    } finally {
+      try {
+        session.close();
+      } catch (RuntimeException closeFail) {
+        if (bodyFailure != null) {
+          bodyFailure.addSuppressed(closeFail);
+        } else {
+          log.warn(
+              "Pkcs11Session.close() başarısız oldu (imza body başarılıydı): {}",
+              closeFail.toString());
+        }
+      }
     }
   }
 
@@ -197,25 +344,42 @@ public class XadesService {
 
   /**
    * Counter-signature için test/runtime ortak implementasyonu. Çağıran kişi {@link Pkcs11Session}'ı
-   * kendisi yönetir ({@link Pkcs11Session#wrapForTest} ile software keystore de olabilir).
+   * kendisi yönetir ({@link Pkcs11Session#wrapForTest} ile software keystore de olabilir). Tanılama
+   * bağlamı (terminal, ATR, cardType, lib) parametre olarak verilir; hata durumunda exception bu
+   * bağlamı taşır.
    */
-  public byte[] signHrWithSession(Pkcs11Session session, SignDocumentDto dto) {
+  public byte[] signHrWithSession(
+      Pkcs11Session session, SignDocumentDto dto, SignatureDiagnostics baseDiag) {
+    SignatureDiagnostics diag = baseDiag != null ? baseDiag : new SignatureDiagnostics();
+    if (dto != null && diag.getTerminalName() == null) {
+      diag.setTerminalName(dto.getTerminalName());
+    }
     byte[] xmlBytes = readBytes(dto);
     String alias;
     try {
       alias = session.resolveAlias(dto.getCertificateId());
     } catch (Exception e) {
-      throw new SignatureOperationException(
-          "Counter-signature için sertifika çözülemedi: " + e.getMessage(), e);
+      throw (SignatureOperationException)
+          new SignatureOperationException(
+                  "Counter-signature için sertifika çözülemedi: " + e.getMessage(), e)
+              .withDiagnostics(diag);
     }
     PrivateKey privateKey = session.getPrivateKey(alias);
     Certificate[] chain = chainBuilder.build(session.getCertificateChain(alias));
 
     try {
+      X509Certificate signingCert = (X509Certificate) chain[0];
+      diag.setKeyAlgorithm(signingCert.getPublicKey().getAlgorithm());
       return doCounterSignature(xmlBytes, privateKey, chain);
     } catch (Exception e) {
-      throw new SignatureOperationException(
-          "XAdES CounterSignature başarısız: " + e.getMessage(), e);
+      String code = classifySignatureFailure(e);
+      String rootMsg = CauseChainExtractor.rootMessage(e);
+      String msg =
+          "XAdES CounterSignature başarısız: "
+              + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+              + (rootMsg != null && !rootMsg.equals(e.getMessage()) ? " | root: " + rootMsg : "");
+      throw (SignatureOperationException)
+          new SignatureOperationException(code, msg, e).withDiagnostics(diag);
     }
   }
 
@@ -223,10 +387,24 @@ public class XadesService {
   /* XAdES-BES (xades4j) implementation                                  */
   /* ================================================================== */
 
-  private byte[] doXadesBesSign(
-      byte[] xmlBytes, Path libraryPath, String certIdentifier, String pin) throws Exception {
+  byte[] doXadesBesSign(
+      byte[] xmlBytes,
+      Path libraryPath,
+      String certIdentifier,
+      String pin,
+      SignatureDiagnostics diag)
+      throws Exception {
     final String pinLocal = pin;
     final String providerName = "merselXadesSigner-" + UUID.randomUUID().toString().substring(0, 8);
+    // SunPKCS11, "name=X" config satırına "SunPKCS11-" prefix'i ekleyerek JCA'ya kaydeder; aynı
+    // ismi tutarlı şekilde xmlsec'in JCEMapper.providerId alanına vereceğiz (aşağıda).
+    final String jcaProviderName = "SunPKCS11-" + providerName;
+
+    // xades4j'in PKCS11KeyStoreKeyingDataProvider'ı kendi SunPKCS11'ini ayağa kaldırıp keystore
+    // load eder. Kart EC objesi içeriyorsa SunEC'nin "Only named ECParameters supported"
+    // patolojisine düşer (cause: IOException → KeyStoreException → UnexpectedJCAException).
+    // BC'yi pozisyon 1'e kayıt edip SunEC'yi kaldırınca EC parse'ı BC'ye düşer ve sorun çözülür.
+    BouncyCastleSetup.ensureRegistered();
 
     PKCS11KeyStoreKeyingDataProvider keyingProvider =
         new PKCS11KeyStoreKeyingDataProvider(
@@ -247,7 +425,97 @@ public class XadesService {
             },
             true);
 
+    // Sertifika public key tipini önceden öğrenmek için chain'i eagerly çekiyoruz. Bu çağrı:
+    //   1. xades4j'in lazy SunPKCS11 init'ini tetikler (sign çağrısından önce JCA'ya kayıt olur)
+    //   2. Cert public key algoritmasını (RSA / EC) görmemizi sağlar — resolver'a doğru keyHint
+    //      verirsek RSA mekanizmaları yerine ECDSA mekanizmalarını seçer. Sahada AKIS / SafeSign
+    //      kartlarında hem RSA hem EC sertifika dağılımı mevcut; default "RSA" varsayımı EC
+    //      kartlarında SIGNATURE_ALGORITHM_UNSUPPORTED'a yol açıyordu.
+    java.util.List<X509Certificate> chain = keyingProvider.getSigningCertificateChain();
+    X509Certificate signingCert = chain.get(0);
+    String keyHint = resolveKeyHint(signingCert);
+
+    // SunPKCS11 explicit AuthProvider.login — KeyStore.load() implicit login'inin yetmediği
+    // patolojinin çaresi.
+    //
+    // Sorun: xades4j PKCS11KeyStoreKeyingDataProvider yalnız KeyStore.load(null, pin) ile PIN
+    // gönderir. SunPKCS11'de bu çağrı KeyStore objesinin açtığı P11Session'da C_Login yapar.
+    // Sonradan Signature.initSign() çağrıldığında P11SessionManager yeni bir session açar; bu
+    // session app-level login state'i devralmazsa (sürücüye göre değişir — AKIS, SafeSign,
+    // bazı Kamu SM kartları bu davranışı gösterir) C_SignInit → CKR_USER_NOT_LOGGED_IN.
+    //
+    // Çözüm: AuthProvider.login() çağrısı SunPKCS11'in P11SessionManager'ına "tüm gelecek
+    // session'lar authenticated kabul edilecek" sinyali verir. login state Provider objesi
+    // Security'den çıkana kadar (close/removeProvider) korunur. Bu çağrı KeyStore.load'un
+    // yaptığından farklı bir scope'ta çalışır.
+    //
+    // Idempotent: SunPKCS11 zaten login ise CKR_USER_ALREADY_LOGGED_IN'i P11SessionManager
+    // içeride yutar, no-op olur. Provider AuthProvider'ı implement etmiyorsa (test ortamında
+    // mock provider gibi) sessizce atla.
+    Provider sunPkcs11 = Security.getProvider(jcaProviderName);
+    if (sunPkcs11 instanceof AuthProvider) {
+      try {
+        io.mersel.dss.agent.api.services.keystore.Pkcs11Session.loginExplicit(
+            (AuthProvider) sunPkcs11, pinLocal == null ? new char[0] : pinLocal.toCharArray());
+        log.debug(
+            "SunPKCS11 AuthProvider.login() explicit çağrıldı (provider={}); app-level login"
+                + " state Signature.initSign() öncesi kuruldu.",
+            jcaProviderName);
+      } catch (LoginException le) {
+        // KeyStore.load implicit login yetmediği halde explicit login de fail ettiyse PIN
+        // bilgisi gerçekten yanlış / kart kilitli / sürücü hata veriyor demektir. Pkcs11Errors
+        // sınıflandırması ile uygun yapısal exception'a dönüştür.
+        throw io.mersel.dss.agent.api.services.keystore.Pkcs11Errors.mapKeyStoreLoadFailure(le);
+      }
+    } else if (sunPkcs11 != null) {
+      log.warn(
+          "Provider '{}' AuthProvider'ı implement etmiyor; explicit login atlandı."
+              + " CKR_USER_NOT_LOGGED_IN ihtimaline karşı dikkatli ol.",
+          jcaProviderName);
+    } else {
+      // Provider Security'de bulunamadı — xades4j lazy init henüz tetiklenmemiş olabilir.
+      // Bu durumda explicit login atlanır; KeyStore.load implicit login'ine güveniriz.
+      log.debug(
+          "Provider '{}' Security registry'de bulunamadı; explicit login atlandı.",
+          jcaProviderName);
+    }
+
+    // Algoritma profili: token'ın CKM_* listesine göre seçilir; default xades4j profili
+    // bazı eski AKIS firmware'lerde "Unsupported parameters" patolojisine yol açar. Resolver
+    // tanılama bağlamına `keyAlgorithm`'i bizim verdiğimiz keyHint'ten yansıtır.
+    SignatureProfileResolver.Resolution resolution =
+        SignatureProfileResolver.resolve(libraryPath, keyHint, diag);
+    if (!resolution.isSuccess()) {
+      // Kart imzalama için uygun mekanizmadan yoksun — direkt kullanıcıya söyle.
+      throw resolution.getError();
+    }
+
     XadesBesSigningProfile profile = new XadesBesSigningProfile(keyingProvider);
+    profile.withAlgorithmsProviderEx(resolution.getProvider());
+    // Cert public key tipine göre KeyInfo zenginleştirme:
+    //   - RSA cert → xades4j → xmlsec `KeyValue.ctor(Document, PublicKey)` → branch
+    //     `RSAPublicKey instanceof` → `<ds:KeyValue><ds:RSAKeyValue><ds:Modulus/><ds:Exponent/>`
+    //   - EC  cert → branch `ECPublicKey instanceof`  → `<ds:KeyValue><dsig11:ECKeyValue>
+    //     <dsig11:NamedCurve URI="urn:oid:..."/><dsig11:PublicKey>...</dsig11:PublicKey>`
+    //     (XML-DSig 1.1 namespace `http://www.w3.org/2009/xmldsig11#`)
+    //
+    // xades4j default'unda `includePublicKey=false` olduğu için KeyInfo'da yalnız
+    // `<ds:X509Data><ds:X509Certificate>` vardı; TÜBİTAK XAdES uygulama kılavuzu KeyInfo'da
+    // KeyValue blogu da bekler. Server-side kardeş proje
+    // (`mersel-dss-server-signer-java/src/main/java/eu/europa/esig/dss/xades/signature/XAdESSignatureBuilder.java`)
+    // tamamen DSS'e geçtikten sonra aynı branch'i manuel olarak override etti
+    // (`addRSAKeyValue` / `addECKeyValue` metotları); agent xades4j path'inde kalacağı için bu
+    // tek satırlık `includePublicKey(true)` switch'i ile aynı çıktıyı `xmlsec`'in zaten
+    // hazır olan key-type dispatch'inden ücretsiz alıyoruz.
+    //
+    // Sertifika modu `SIGNING_CERTIFICATE`: yalnız imzacı sertifika eklenir (zincir değil);
+    // TÜBİTAK kılavuzuyla uyumlu. `checkKeyUsage(true)` default; `signKeyInfo(false)` default —
+    // KeyInfo imzalamayan e-Fatura standardına uygun.
+    BasicSignatureOptions keyInfoOptions =
+        new BasicSignatureOptions()
+            .includeSigningCertificate(SigningCertificateMode.SIGNING_CERTIFICATE)
+            .includePublicKey(true);
+    profile.withBasicSignatureOptions(keyInfoOptions);
     XadesSigner signer = profile.newSigner();
 
     Document document = parseXml(xmlBytes);
@@ -257,8 +525,380 @@ public class XadesService {
         new DataObjectReference("").withTransform(new EnvelopedSignatureTransform());
     SignedDataObjects dataObjs = new SignedDataObjects().withSignedDataObject(dataObj);
 
-    signer.sign(dataObjs, root);
+    // PKCS#11 token'ından gelen private key opaque olabilir (CKA_SENSITIVE=true, CKA_MODULUS
+    // / CKA_EC_PARAMS extractable değil). Bu durumda SunPKCS11 P11Key$P11PrivateKey base
+    // class'ını döner; ne RSAPrivateKey ne ECPrivateKey arayüzlerini implement eder.
+    //
+    // xmlsec (xades4j içinden) SignatureBaseRSA / SignatureECDSA ctor'unda
+    //   Signature.getInstance(jcaAlg, JCEMapper.getProviderId())
+    // çağırır. JCEMapper.providerId null ise provider'sız çağrılır → JCA chain BC'yi (pos 1)
+    // seçer → BC'nin RSA/ECDSA Signature SPI'sı `instanceof RSAPrivateKey` /
+    // `instanceof ECPrivateKey` kontrol eder → InvalidKeyException("Supplied key (X) is not
+    // a RSAPrivateKey instance"). Opaque P11Key bu kontrolü geçemez.
+    //
+    // Çözüm: JCEMapper.providerId'i SunPKCS11 provider'ımıza çakarak xmlsec'in
+    // Signature.getInstance(jcaAlg, "SunPKCS11-X") çağrısına dönmesini sağlıyoruz. SunPKCS11'in
+    // kendi RSA/ECDSA Signature implementasyonları P11Key'i doğrudan kabul edip C_Sign'a
+    // yönlendirir (sensitive private key material'ı asla kartı terk etmeden).
+    //
+    // Global static state; multi-thread concurrent imzalamada race olabilir. Agent tek-kullanıcı
+    // desktop senaryosunda eş zamanlı imza akışı pratik değil; yine de class-level monitor
+    // kilidiyle korunuyor (try/finally ile eski değeri geri yüklüyoruz).
+    String previousProviderId;
+    synchronized (XadesService.class) {
+      previousProviderId = JCEMapper.getProviderId();
+      JCEMapper.setProviderId(jcaProviderName);
+    }
+    try {
+      signer.sign(dataObjs, root);
+    } finally {
+      synchronized (XadesService.class) {
+        JCEMapper.setProviderId(previousProviderId);
+      }
+    }
+    // Apache Santuario Base64 wrapping `\r\n` üretir; DOM Transformer `\r`'yi `&#13;` entity'sine
+    // çevirir → çıktı XAdES'inde görsel kirlilik. Tüm imza subtree'lerinde standart 76-char LF
+    // wrap'ine normalize ediyoruz; canonicalization girişi olmayan iki text node (X509Certificate
+    // + SignatureValue) için Base64 decoder zaten whitespace'i yutar, imza geçerliliği etkilenmez.
+    rewrapBase64InSignatureSubtree(document.getDocumentElement());
     return serialise(document);
+  }
+
+  /* ================================================================== */
+  /* XAdES-BES native PKCS#11 sign path (CKA_ID collision fallback)      */
+  /* ================================================================== */
+
+  /**
+   * SunPKCS11 P11KeyStore'u atlayarak doğrudan PKCS#11 spec çağrılarıyla XAdES-BES enveloped imza
+   * üretir. IAIK PKCS#11 Wrapper kod tabanından türetilen {@code org.xipki:ipkcs11wrapper} (server
+   * projesinde HSM akışında kullanılan aynı bağımlılık) JNI bridge'i üzerinden token'a iner.
+   *
+   * <p>Bu yol yalnız <b>fallback</b> olarak çağrılır: xades4j path {@code KeyStoreException:
+   * invalid KeyStore state: found N private keys sharing CKA_ID} ile patladığında devreye girer.
+   *
+   * <p>Sahada NES Bulut / Kamu SM dual-key (SIGN0 imzalama + SIGN1 anahtar uzlaşımı) setup'ında
+   * sürücü her iki anahtarı aynı CKA_ID ile yazar; OpenJDK 1.8 {@code P11KeyStore.mapPrivateKeys()}
+   * bu duruma izin vermez ve hiçbir cert seçilemeden hata fırlatır. IAIK wrapper SunPKCS11 JCA
+   * soyutlama katmanını HİÇ kullanmaz; cert'i {@link IaikPkcs11Signer#findSigningKey} ile CKA_LABEL
+   * / X.509 serial / SHA-1 thumbprint match'i üzerinden bulup, aynı CKA_ID'deki birden çok private
+   * key'i {@code CKA_SIGN=TRUE} + {@code CKA_KEY_TYPE} ile ayrıştırır.
+   *
+   * <p>İmza oluşumu:
+   *
+   * <ol>
+   *   <li>Apache Santuario {@code XMLSignature} ile manuel DOM iskeleti kurulur (Reference =
+   *       enveloped + signedProps; KeyInfo = X509Data + KeyValue; Object = QualifyingProperties).
+   *   <li>{@code SignedInfo.generateDigestValues()} her {@code Reference} için canonical-octet →
+   *       digest hesaplar (PrivateKey gerektirmez).
+   *   <li>{@code SignedInfo.getCanonicalizedOctetStream()} ile SignedInfo'nun canonical bytes'ı
+   *       yazılım tarafında alınır, SHA-256 (RSA) / SHA-384 (EC) hash edilir.
+   *   <li>RSA için CKM_RSA_PKCS bekleyen <em>DigestInfo (DER)</em> prefix'i öne eklenir; EC için
+   *       ham hash byte'ları aynen verilir.
+   *   <li>{@link IaikPkcs11Signer#sign} → ham PKCS#1 v1.5 (RSA) veya R||S concat (ECDSA) byte'ları
+   *       Base64'lenip {@code <ds:SignatureValue>} text content'ine yerleştirilir.
+   * </ol>
+   *
+   * <p>Tanılama bağlamı: {@code fallbackStrategy=native-pkcs11-dual-key-bypass}, {@code
+   * resolvedPkcs11Mechanism=CKM_RSA_PKCS|CKM_ECDSA}, uyarı satırı eklenir.
+   */
+  byte[] doXadesBesSignNative(
+      byte[] xmlBytes,
+      Path libraryPath,
+      String certIdentifier,
+      String pin,
+      SignatureDiagnostics diag)
+      throws Exception {
+    BouncyCastleSetup.ensureRegistered();
+    Init.init();
+
+    try (IaikPkcs11Signer signer = IaikPkcs11Signer.open(libraryPath, pin)) {
+      IaikPkcs11Signer.NativeSigningKey nativeKey = signer.findSigningKey(certIdentifier);
+      X509Certificate signingCert = nativeKey.getCertificate();
+      boolean ec = nativeKey.isEc() || isEcdsa(signingCert);
+
+      String c14nUrl = Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS;
+      String digestUrl = ec ? DIGEST_SHA384 : DigestMethod.SHA256;
+      String sigUrl = ec ? SIG_ECDSA_SHA384 : SIG_RSA_SHA256;
+      String digestJca = ec ? "SHA-384" : "SHA-256";
+      long pkcs11Mechanism = ec ? IaikPkcs11Signer.CKM_ECDSA : IaikPkcs11Signer.CKM_RSA_PKCS;
+      String mechanismLabel = ec ? "CKM_ECDSA" : "CKM_RSA_PKCS";
+
+      diag.setKeyAlgorithm(ec ? "EC" : "RSA");
+      try {
+        diag.setKeySize(estimateKeySizeBits(signingCert));
+      } catch (RuntimeException ignore) {
+        /* tanılama best-effort */
+      }
+      diag.setAttemptedSignatureAlgorithm(sigUrl);
+      diag.setResolvedJcaSignature(ec ? "RAW-ECDSA-NATIVE" : "RAW-RSA-NATIVE");
+      diag.setResolvedPkcs11Mechanism(mechanismLabel);
+      diag.setFallbackStrategy("iaik-pkcs11-sunpkcs11-bypass");
+      mergeWarning(
+          diag,
+          "SunPKCS11 P11KeyStore patolojisi tespit edildi (CKA_ID collision veya"
+              + " CKR_USER_NOT_LOGGED_IN); IAIK PKCS#11 wrapper üzerinden imza atıldı.");
+
+      Document document = parseXml(xmlBytes);
+      Element root = document.getDocumentElement();
+
+      String sigId =
+          "MerselSig-" + UUID.randomUUID().toString().replaceAll("-", "").substring(0, 12);
+      String sigValueId = "Signature-Value-Id-" + UUID.randomUUID();
+      String objectId = "Object-Id-" + UUID.randomUUID();
+      String signedPropsId = "Signed-Properties-Id-" + UUID.randomUUID();
+      String signedPropsRefId = "Reference-Id-" + UUID.randomUUID();
+      String envelopedRefId = "Reference-Id-" + UUID.randomUUID();
+
+      org.apache.xml.security.signature.XMLSignature santSig =
+          new org.apache.xml.security.signature.XMLSignature(document, "", sigUrl, c14nUrl);
+      santSig.setId(sigId);
+      root.appendChild(santSig.getElement());
+
+      // Reference 1: URI="" with EnvelopedSignatureTransform
+      Transforms tfsEnveloped = new Transforms(document);
+      tfsEnveloped.addTransform(Transforms.TRANSFORM_ENVELOPED_SIGNATURE);
+      santSig.addDocument("", tfsEnveloped, digestUrl, envelopedRefId, null);
+
+      // Reference 2: URI="#signedPropsId" with c14n transform; Type = SignedProperties
+      Transforms tfsSp = new Transforms(document);
+      tfsSp.addTransform(Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS);
+      santSig.addDocument(
+          "#" + signedPropsId, tfsSp, digestUrl, signedPropsRefId, XADES_TYPE_SIGNED_PROPERTIES);
+
+      // KeyInfo: <ds:X509Data><ds:X509Certificate> +
+      // <ds:KeyValue><ds:RSAKeyValue|dsig11:ECKeyValue>
+      // Santuario `KeyInfo.add(PublicKey)` instanceof dispatch ile RSAKeyValue / ECKeyValue üretir.
+      santSig.addKeyInfo(signingCert);
+      santSig.addKeyInfo(signingCert.getPublicKey());
+
+      // Object/QualifyingProperties/SignedProperties (counter-sig path'iyle aynı şablon)
+      ObjectContainer obj = new ObjectContainer(document);
+      obj.setId(objectId);
+      Element qualifyingProps = buildQualifyingProperties(document, sigId, signedPropsId);
+      Element signedPropsEl = (Element) qualifyingProps.getFirstChild();
+      populateSignedProperties(document, signedPropsEl, signingCert, digestUrl);
+      obj.getElement().appendChild(qualifyingProps);
+      santSig.appendObject(obj);
+
+      // Reference DigestValues hesapla (PrivateKey'siz)
+      santSig.getSignedInfo().generateDigestValues();
+
+      // SignedInfo canonical bytes → software digest
+      byte[] siCanonical = santSig.getSignedInfo().getCanonicalizedOctetStream();
+      MessageDigest md = MessageDigest.getInstance(digestJca);
+      byte[] tbsHash = md.digest(siCanonical);
+
+      // Native PKCS#11 imza:
+      //  - RSA: CKM_RSA_PKCS, DigestInfo (RFC 8017 §9.2 EMSA-PKCS1-v1_5 EM Step 2)
+      //  - EC : CKM_ECDSA, ham hash (RFC 4051 §2.2.4, R||S fixed-width)
+      byte[] dataToSign = ec ? tbsHash : rsaDigestInfo(tbsHash, digestJca);
+      byte[] rawSignature = signer.sign(nativeKey, pkcs11Mechanism, dataToSign);
+      if (rawSignature == null || rawSignature.length == 0) {
+        throw new SignatureOperationException(
+            "Native PKCS#11 C_Sign boş imza döndürdü (mech=" + mechanismLabel + ").");
+      }
+
+      // <ds:SignatureValue Id="..."> içine inject. Santuario varsayılan olarak SignatureValue
+      // elementini SignedInfo'dan sonra append eder; Id'ini de güncelleyelim.
+      NodeList svList = santSig.getElement().getElementsByTagNameNS(DS_NS, "SignatureValue");
+      if (svList.getLength() == 0) {
+        throw new SignatureOperationException(
+            "Santuario XMLSignature iskeletinde <ds:SignatureValue> bulunamadı.");
+      }
+      Element svEl = (Element) svList.item(0);
+      svEl.setAttribute("Id", sigValueId);
+      svEl.setTextContent(Base64.getEncoder().encodeToString(rawSignature));
+
+      // SignatureValue burada JDK Base64 (line break'siz) ile yazılıyor; ancak X509Certificate
+      // text node'u Santuario `addKeyInfo` üzerinden geliyor ve MIME 76-char CRLF taşıyor.
+      // Tüm imza subtree'sini standart LF wrap'ine normalize et.
+      rewrapBase64InSignatureSubtree(document.getDocumentElement());
+      return serialise(document);
+    }
+  }
+
+  /**
+   * EMSA-PKCS1-v1_5 (RFC 8017 §9.2) için DigestInfo (DER) prefix'ini hash byte'larının başına
+   * ekler. CKM_RSA_PKCS ham PKCS#1 v1.5 padding yapar ama DigestInfo encoding'ini bizden bekler.
+   *
+   * <p>Hardcoded prefix'ler PKCS#1 standardından alındı; SHA-256 / SHA-384 / SHA-512 destekli.
+   */
+  static byte[] rsaDigestInfo(byte[] hash, String digestJca) {
+    byte[] prefix;
+    String alg = digestJca == null ? "" : digestJca.toUpperCase(Locale.ROOT);
+    switch (alg) {
+      case "SHA-256":
+        prefix =
+            new byte[] {
+              0x30,
+              0x31,
+              0x30,
+              0x0d,
+              0x06,
+              0x09,
+              0x60,
+              (byte) 0x86,
+              0x48,
+              0x01,
+              0x65,
+              0x03,
+              0x04,
+              0x02,
+              0x01,
+              0x05,
+              0x00,
+              0x04,
+              0x20
+            };
+        break;
+      case "SHA-384":
+        prefix =
+            new byte[] {
+              0x30,
+              0x41,
+              0x30,
+              0x0d,
+              0x06,
+              0x09,
+              0x60,
+              (byte) 0x86,
+              0x48,
+              0x01,
+              0x65,
+              0x03,
+              0x04,
+              0x02,
+              0x02,
+              0x05,
+              0x00,
+              0x04,
+              0x30
+            };
+        break;
+      case "SHA-512":
+        prefix =
+            new byte[] {
+              0x30,
+              0x51,
+              0x30,
+              0x0d,
+              0x06,
+              0x09,
+              0x60,
+              (byte) 0x86,
+              0x48,
+              0x01,
+              0x65,
+              0x03,
+              0x04,
+              0x02,
+              0x03,
+              0x05,
+              0x00,
+              0x04,
+              0x40
+            };
+        break;
+      default:
+        throw new IllegalArgumentException(
+            "Desteklenmeyen RSA DigestInfo algoritması: " + digestJca);
+    }
+    byte[] out = new byte[prefix.length + hash.length];
+    System.arraycopy(prefix, 0, out, 0, prefix.length);
+    System.arraycopy(hash, 0, out, prefix.length, hash.length);
+    return out;
+  }
+
+  /** RSA cert'i için modül bit'leri; EC cert için field bit'leri. Tanılama best-effort. */
+  static Integer estimateKeySizeBits(X509Certificate cert) {
+    java.security.PublicKey pk = cert.getPublicKey();
+    if (pk instanceof java.security.interfaces.RSAPublicKey) {
+      return ((java.security.interfaces.RSAPublicKey) pk).getModulus().bitLength();
+    }
+    if (pk instanceof java.security.interfaces.ECPublicKey) {
+      java.security.interfaces.ECPublicKey ec = (java.security.interfaces.ECPublicKey) pk;
+      return ec.getParams().getCurve().getField().getFieldSize();
+    }
+    return null;
+  }
+
+  /**
+   * Fallback log mesajını cause zincirinde algılanan pattern'a göre kişiselleştirir. CKA_ID
+   * collision ile CKR_USER_NOT_LOGGED_IN farklı kart patolojileri; destek loglarında hangi pattern
+   * tetikledi görmek tanılama için kritik.
+   */
+  private void logFallbackReason(Throwable cause, SignDocumentDto dto) {
+    String reason = describePathology(cause);
+    log.warn(
+        "xades4j path SunPKCS11 patolojisi ({}) yüzünden başarısız; IAIK PKCS#11 imza yoluna"
+            + " düşülüyor (terminal={}, certId={}).",
+        reason,
+        dto.getTerminalName(),
+        dto.getCertificateId());
+  }
+
+  /** Cause zincirinde bilinen SunPKCS11 patolojilerinden hangisinin tetiklendiğini açıklar. */
+  private static String describePathology(Throwable t) {
+    Throwable match =
+        io.mersel.dss.agent.api.exceptions.CauseChainExtractor.walk(
+            t,
+            new java.util.function.Predicate<Throwable>() {
+              @Override
+              public boolean test(Throwable cur) {
+                String msg = cur.getMessage();
+                return msg != null
+                    && (msg.toLowerCase(Locale.ROOT).contains("ckr_user_not_logged_in")
+                        || (msg.toLowerCase(Locale.ROOT).contains("invalid keystore state")
+                            && msg.toLowerCase(Locale.ROOT).contains("cka_id"))
+                        || (msg.toLowerCase(Locale.ROOT).contains("private keys sharing")
+                            && msg.toLowerCase(Locale.ROOT).contains("cka_id")));
+              }
+            });
+    if (match == null) {
+      return "bilinmeyen pattern";
+    }
+    String lower = match.getMessage().toLowerCase(Locale.ROOT);
+    if (lower.contains("ckr_user_not_logged_in")) {
+      return "CKR_USER_NOT_LOGGED_IN (session-scoped login state, AKİS / SafeSign tipik)";
+    }
+    if (lower.contains("invalid keystore state") && lower.contains("cka_id")) {
+      return "CKA_ID collision (NES Bulut dual-key SIGN0+SIGN1)";
+    }
+    if (lower.contains("private keys sharing") && lower.contains("cka_id")) {
+      return "CKA_ID collision (private keys sharing CKA_ID)";
+    }
+    return "bilinmeyen pattern";
+  }
+
+  /** Mevcut uyarı listesine ekleme yapar (immutable list olduğu için kopya alıp set eder). */
+  private static void mergeWarning(SignatureDiagnostics diag, String warning) {
+    if (diag == null || warning == null) return;
+    java.util.List<String> next = new java.util.ArrayList<String>();
+    if (diag.getWarnings() != null) {
+      next.addAll(diag.getWarnings());
+    }
+    if (!next.contains(warning)) {
+      next.add(warning);
+    }
+    diag.setWarnings(next);
+  }
+
+  /**
+   * Sertifikanın public key algoritmasına göre {@link SignatureProfileResolver}'a verilecek
+   * keyHint'i seçer: {@code "EC"} veya {@code "RSA"}. Tek otörite kaynağıdır; {@link #isEcdsa} ile
+   * aynı mantık. Frontend "kart EC mı RSA mı?" sorusunu trace JSON'undan görür.
+   */
+  static String resolveKeyHint(X509Certificate cert) {
+    return isEcdsa(cert) ? "EC" : "RSA";
+  }
+
+  /** {@link #resolveKeyHint} için boolean adapter. */
+  static boolean isEcdsa(X509Certificate cert) {
+    if (cert == null || cert.getPublicKey() == null) return false;
+    String algo = cert.getPublicKey().getAlgorithm();
+    if (algo == null) return false;
+    String upper = algo.toUpperCase(Locale.ROOT);
+    return upper.contains("EC") && !upper.contains("RSA");
   }
 
   /**
@@ -402,10 +1042,23 @@ public class XadesService {
             fac.newSignatureMethod(sigUrl, null),
             Arrays.asList(signedPropsRef, counterRef));
 
-    // 3) KeyInfo — yalnız imzacı sertifikası (xades:Cert ile zaten chain'e bağlanıyor)
+    // 3) KeyInfo — imzacı sertifikası + KeyValue (RSA/EC public key) ile zenginleştirilir.
+    //
+    // Cert public key tipine göre KeyInfo yapısı:
+    //   - RSA: <ds:KeyValue><ds:RSAKeyValue><ds:Modulus/><ds:Exponent/>
+    //   - EC : <ds:KeyValue><dsig11:ECKeyValue><dsig11:NamedCurve URI="urn:oid:..."/>
+    //          <dsig11:PublicKey>...</dsig11:PublicKey></dsig11:ECKeyValue></ds:KeyValue>
+    //
+    // JSR 105 `KeyInfoFactory.newKeyValue(PublicKey)` alt katmanda xmlsec
+    // `KeyValue(Document, PublicKey)` ctor'una yönlenir; ctor `instanceof RSAPublicKey`
+    // (→ <ds:RSAKeyValue>) ve `instanceof ECPublicKey` (→ <dsig11:ECKeyValue>) branch'lerini
+    // otomatik kurar (`org.apache.xml.security.keys.content.KeyValue` line 92-115). TÜBİTAK
+    // XAdES uygulama kılavuzu KeyInfo'da KeyValue blogu da bekler; ana xades4j akışıyla
+    // (`doXadesBesSign` → `BasicSignatureOptions.includePublicKey(true)`) parite sağlanır.
     KeyInfoFactory kif = fac.getKeyInfoFactory();
     X509Data x509Data = kif.newX509Data(Collections.<Object>singletonList(signingCert));
-    KeyInfo ki = kif.newKeyInfo(Collections.singletonList(x509Data));
+    javax.xml.crypto.dsig.keyinfo.KeyValue keyValue = kif.newKeyValue(signingCert.getPublicKey());
+    KeyInfo ki = kif.newKeyInfo(Arrays.asList(x509Data, keyValue));
 
     // 4) XMLSignature — Id ve SignatureValue Id explicit, Object listesi içeride QP taşıyor
     javax.xml.crypto.dsig.XMLSignature xmlSig =
@@ -418,6 +1071,10 @@ public class XadesService {
 
     xmlSig.sign(sc);
 
+    // Sadece counter-signature subtree'sinde rewrap yapıyoruz; parent imzanın c14n parity'sini
+    // korumak için onun text node'larına dokunmuyoruz (zaten counter-sign'dan ÖNCE parent imza
+    // doğrulanmış / digest'lenmiş; mutasyon riski almıyoruz).
+    rewrapBase64InSignatureSubtree(counterSig);
     return serialise(doc);
   }
 
@@ -477,10 +1134,25 @@ public class XadesService {
     issuerSerial.appendChild(x509SerialNumber);
   }
 
-  /** Sertifikanın DER kodlamasını verilen XAdES digest algoritmasıyla hash'leyip Base64 döner. */
+  /**
+   * Sertifikanın DER kodlamasını verilen XAdES digest algoritmasıyla hash'leyip Base64 döner.
+   * SHA-256, SHA-384, SHA-512 ve SHA-1 destekli — {@link SignatureProfileResolver} sahada nadiren
+   * de olsa SHA-512/SHA-1 seçebiliyor.
+   */
   private static String certificateDigestBase64(X509Certificate cert, String digestUrl)
       throws Exception {
-    String javaAlg = digestUrl.endsWith("sha384") ? "SHA-384" : "SHA-256";
+    String javaAlg;
+    if (digestUrl == null) {
+      javaAlg = "SHA-256";
+    } else if (digestUrl.endsWith("sha512")) {
+      javaAlg = "SHA-512";
+    } else if (digestUrl.endsWith("sha384")) {
+      javaAlg = "SHA-384";
+    } else if (digestUrl.endsWith("sha1")) {
+      javaAlg = "SHA-1";
+    } else {
+      javaAlg = "SHA-256";
+    }
     MessageDigest md = MessageDigest.getInstance(javaAlg);
     byte[] digest = md.digest(cert.getEncoded());
     return Base64.getEncoder().encodeToString(digest);
@@ -564,13 +1236,6 @@ public class XadesService {
     return null;
   }
 
-  static boolean isEcdsa(X509Certificate cert) {
-    String algo = cert.getPublicKey().getAlgorithm();
-    if (algo == null) return false;
-    String upper = algo.toUpperCase(Locale.ROOT);
-    return upper.contains("EC");
-  }
-
   /* ================================================================== */
   /* DOM helpers                                                         */
   /* ================================================================== */
@@ -598,6 +1263,156 @@ public class XadesService {
     } catch (Exception e) {
       throw new SignatureOperationException("XML serileştirilemedi: " + e.getMessage(), e);
     }
+  }
+
+  /* ================================================================== */
+  /* Base64 line-wrap normalisation                                      */
+  /* ================================================================== */
+
+  /**
+   * Standart XAdES Base64 satır genişliği: 76 karakter (RFC 2045 / MIME default; Apache Santuario,
+   * OpenSSL, eu.europa.esig DSS hepsi aynı genişlikte üretir). Sahada üretilen imzaların görsel
+   * kimliği ile uyumlu olsun.
+   */
+  private static final int BASE64_LINE_WIDTH = 76;
+
+  /**
+   * Verilen subtree içindeki {@code <ds:X509Certificate>} ve {@code <ds:SignatureValue>}
+   * elementlerinin Base64 text içeriğini standart 76 karakter LF wrap'ine normalize eder.
+   *
+   * <h3>Neden gerekli?</h3>
+   *
+   * <p>Apache Santuario, {@code <ds:X509Certificate>} ve {@code <ds:SignatureValue>} text
+   * node'larını {@code Base64.encodeToString} (Apache Commons MIME mode) ile yazar; çıktı 76
+   * karakterde {@code \r\n} ile kırılır. DOM Transformer XML 1.0 spec gereği literal {@code \r}
+   * karakterini text içeriğinde {@code &#13;} entity'si olarak escape eder (round-trip korunsun
+   * diye), sonuçta agent'ın ürettiği XAdES dosyası standart araçlarla üretilenlerden görsel olarak
+   * farklı çıkıyordu (her satır sonu {@code &#13;} taşıyordu).
+   *
+   * <h3>Neden global property ile değil node-bazlı?</h3>
+   *
+   * <p>{@code -Dorg.apache.xml.security.ignoreLineBreaks=true} sistem property'si Santuario sınıfı
+   * yüklenmeden ÖNCE set edilmek zorunda; agent başlatılırken Spring autoconfigure Santuario'yu
+   * zaten yüklemiş oluyor. Bu node-bazlı normalize global yan etki yaratmadan aynı sonucu veriyor.
+   *
+   * <h3>İmza geçerliliği etkilenir mi?</h3>
+   *
+   * <p>Hayır. {@code <ds:X509Certificate>} ve {@code <ds:SignatureValue>} text node'ları
+   * <b>canonicalization / digest girişi değil</b>; yalnız Base64 decode edilip ham byte'lara
+   * çevriliyor. Base64 decoder whitespace'i (space/tab/CR/LF) zaten yok sayar. Aynı yaklaşım server
+   * projesinde {@code TestUserCounterSignatureService#rewrapBase64InSubtree} tarafından
+   * kullanılıyor (kardeş regresyon testi: {@code TestUserCounterSignatureCleanOutputTest}).
+   *
+   * <p>Diğer Base64 taşıyan ama digest girişi olabilen elementler ({@code DigestValue}, {@code
+   * CertDigest > DigestValue}) bu normalize'in dışında bırakılır; onlar bizim tarafımızdan zaten
+   * tek satır olarak yazılıyor (JDK {@code Base64.getEncoder()} default line-break üretmez),
+   * dokunmaya gerek yok.
+   */
+  static void rewrapBase64InSignatureSubtree(Element root) {
+    if (root == null) {
+      return;
+    }
+    rewrapBase64ForAll(root, DS_NS, "X509Certificate");
+    rewrapBase64ForAll(root, DS_NS, "SignatureValue");
+  }
+
+  private static void rewrapBase64ForAll(Element root, String ns, String localName) {
+    NodeList list = root.getElementsByTagNameNS(ns, localName);
+    for (int i = 0; i < list.getLength(); i++) {
+      Element el = (Element) list.item(i);
+      String text = el.getTextContent();
+      if (text == null || text.isEmpty()) {
+        continue;
+      }
+      // Önce mevcut whitespace'leri (Santuario CRLF, Transformer indentation) sıyır → ham
+      // Base64. Sonra standart LF wrap ile yeniden böl.
+      String raw = text.replaceAll("[\\r\\n\\t ]+", "");
+      if (raw.isEmpty()) {
+        continue;
+      }
+      String wrapped = wrapBase64(raw);
+      if (!wrapped.equals(text)) {
+        el.setTextContent(wrapped);
+      }
+    }
+  }
+
+  /**
+   * Base64 string'ini {@link #BASE64_LINE_WIDTH} karakter genişliğinde LF ile böler. Standalone,
+   * kütüphane bağımlılığı yok — JDK MIME encoder'ı line separator olarak {@code \r\n} kullanır
+   * (XML'de aynı problem); JDK basic encoder hiç wrap yapmaz (tek-satır görsel kirlilik).
+   */
+  static String wrapBase64(String base64) {
+    int len = base64.length();
+    if (len <= BASE64_LINE_WIDTH) {
+      return base64;
+    }
+    StringBuilder sb = new StringBuilder(len + len / BASE64_LINE_WIDTH + 1);
+    int offset = 0;
+    while (offset < len) {
+      int end = Math.min(offset + BASE64_LINE_WIDTH, len);
+      sb.append(base64, offset, end);
+      if (end < len) {
+        sb.append('\n');
+      }
+      offset = end;
+    }
+    return sb.toString();
+  }
+
+  /**
+   * İmzalama akışı başlamadan önce toplanabilecek tanılama bağlamını üretir: terminal adı, ATR,
+   * algılanan kart tipi, çözülen lib yolu. Resolver bu yapıyı zenginleştirerek (token info,
+   * mekanizma listesi, fallback stratejisi) hata yanıtına ekler.
+   */
+  SignatureDiagnostics baseDiagnosticsFor(SignDocumentDto dto, Path libraryPath) {
+    SignatureDiagnostics diag = new SignatureDiagnostics();
+    if (dto != null) {
+      diag.setTerminalName(dto.getTerminalName());
+    }
+    if (libraryPath != null) {
+      diag.setPkcs11Library(libraryPath.toString());
+    }
+    if (readerService != null && dto != null && dto.getTerminalName() != null) {
+      try {
+        SmartCardInfo info = readerService.findByTerminalName(dto.getTerminalName());
+        if (info != null) {
+          diag.setAtr(info.getAtrHex());
+          if (info.getCardType() != null) {
+            diag.setCardType(info.getCardType().getName());
+          }
+        }
+      } catch (RuntimeException scanFail) {
+        // Tanılama best-effort; readerService çökerse imzalama yine devam etsin.
+        log.debug("Tanılama bağlamı için kart bilgisi alınamadı: {}", scanFail.getMessage());
+      }
+    }
+    return diag;
+  }
+
+  /**
+   * Cause zincirinde "Unsupported parameters" / "CKR_MECHANISM_INVALID" / "Mechanism not supported"
+   * gibi bilinen algoritma uyumsuzluğu pattern'lerini ararsa {@code
+   * SIGNATURE_ALGORITHM_UNSUPPORTED} kodunu üretir; aksi halde generic {@code SIGNATURE_FAILED}.
+   * Frontend bu kod farkıyla "kart firmware'i güncelleme önerisi" gösterebilir.
+   */
+  static String classifySignatureFailure(Throwable e) {
+    if (e == null) return SignatureOperationException.CODE_FAILED;
+    String[] needles = {
+      "unsupported parameters",
+      "ckr_mechanism_invalid",
+      "ckr_key_type_inconsistent",
+      "ckr_function_not_supported",
+      "mechanism not supported",
+      "no such algorithm",
+      "unsupportedalgorithm"
+    };
+    for (String n : needles) {
+      if (CauseChainExtractor.findContaining(e, n) != null) {
+        return SignatureOperationException.CODE_ALGORITHM_UNSUPPORTED;
+      }
+    }
+    return SignatureOperationException.CODE_FAILED;
   }
 
   private static byte[] readBytes(SignDocumentDto dto) {

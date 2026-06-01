@@ -6,7 +6,688 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
-## [1.0.6] — 2026-06-01
+### Fixed
+
+- **XAdES çıktısında `<ds:X509Certificate>` ve `<ds:SignatureValue>` text
+  node'larında `&#13;` (CR entity) görsel kirliliği — Santuario CRLF wrap +
+  Transformer round-trip artefaktı**: agent'ın ürettiği XAdES dosyasında
+  Base64-encoded sertifika ve imza değerlerinin her satır sonunda `&#13;`
+  entity'si görünüyordu (örn. `MIIDhTCCAm2gAwIBAg...&#13;...&#13;...`). GİB
+  entegratörlerinin görsel önizleme akışında ve manual XML inspection'da
+  standart XAdES çıktısından ayırt edilebilir bir kirlilik yaratıyordu.
+
+  **Kök neden**: Apache Santuario `KeyInfo.add(X509Certificate)` ve
+  `<ds:SignatureValue>` text node'larını Apache Commons Codec MIME mode ile
+  Base64'e çevirir → çıktı 76 karakterde **`\r\n`** ile bölünür (RFC 2045 /
+  MIME geleneği). Sonra DOM `Transformer` XML 1.0 spec gereği literal CR
+  karakterini text içeriğinde **`&#13;`** olarak entity-encode eder
+  (round-trip korunsun diye — XML parser CR'leri normalize edip yutmasın).
+  Sonuç: her 76 karakterde bir `&#13;` entity'si.
+
+  **Neden global property çözüm değil**:
+  `-Dorg.apache.xml.security.ignoreLineBreaks=true` Santuario sınıfı
+  yüklenmeden ÖNCE set edilmek zorunda; agent boot'unda Spring autoconfigure
+  Santuario'yu çoktan yüklemiş oluyor ve property runtime'da yan etkisiz
+  kalıyor. Ayrıca production XAdES davranışını global olarak değiştirmek
+  başka path'leri (CAdES detached, counter-signature parent c14n) riske
+  sokar.
+
+  **Çözüm**: imza üretildikten sonra ilgili subtree içindeki
+  `<ds:X509Certificate>` ve `<ds:SignatureValue>` text node'larını standart
+  76-char LF wrap'ine normalize ediyoruz (`XadesService#rewrapBase64InSignatureSubtree`).
+  Üç imza yolunda da çağrı yapılır:
+
+  | İmza yolu                | Subtree                       | Etkilenen elementler        |
+  |--------------------------|-------------------------------|------------------------------|
+  | `doXadesBesSign` (xades4j) | document root                 | X509Certificate + SignatureValue |
+  | `doXadesBesSignNative` (IAIK) | document root              | X509Certificate (+ SV no-op) |
+  | `doCounterSignature`     | yalnız `<xades:CounterSignature>` | counter-sig X509 + SV        |
+
+  Bu iki node canonicalization / digest girişi <em>değil</em> (sadece Base64
+  decode edilip ham byte'lara çevrilirler; Base64 decoder whitespace'i —
+  space/tab/CR/LF — yutar) → imza geçerliliği etkilenmez. Counter-signature
+  yolunda parent imzanın text node'larına dokunulmaz (parent c14n parity
+  korunur).
+
+  **Etkilenen bileşenler**: `XadesService.java` — yeni package-private
+  static helper'lar: `BASE64_LINE_WIDTH=76` sabiti, `wrapBase64(String)`
+  (standalone LF wrapper, library bağımlılığı yok),
+  `rewrapBase64InSignatureSubtree(Element)` (X509Certificate + SignatureValue
+  normalize'ı), `rewrapBase64ForAll(Element, ns, localName)` (NodeList
+  iterator). Üç imza akışının `serialise()` çağrısından önce subtree rewrap
+  ekleyen 3 satırlık değişiklik.
+
+  **Regresyon koruması**: `XadesServiceBase64WrapTest` (8 senaryo) —
+  `wrapBase64` happy path (kısa string passthrough, tam 76 char no-op,
+  77+ char LF wrap, 1500 char gerçekçi cert boyutu, roundtrip whitespace
+  stripping), `rewrapBase64InSignatureSubtree` Santuario CRLF → LF
+  normalize, DOM Transformer çıktısında `&#13;` / `&#xD;` entity'sinin
+  kalmadığı, null root no-op davranışı, tek-satır temiz Base64'ün korunması.
+  Aynı çözüm server projesinde `TestUserCounterSignatureService#rewrapBase64InSubtree`
+  olarak mevcut; regresyon kardeşi `TestUserCounterSignatureCleanOutputTest`.
+
+- **`CKR_CRYPTOKI_ALREADY_INITIALIZED` IAIK fallback NULL-args yolundan
+  leak — hibrit SunPKCS11+xipki paritesi**: AKİS macOS / Linux'ta sertifika
+  listeleme akışı (`Pkcs11PublicCertificateReader`, SunPKCS11 wrapper'ı
+  üzerinden) `.dylib`'i ilk kez init ettikten sonra IAIK fallback'e düşen
+  imza akışı `Pkcs11LibraryException: PKCS#11 modülü initialize edilemedi
+  (/usr/local/lib/libakisp11.dylib): CKR_CRYPTOKI_ALREADY_INITIALIZED`
+  hatasıyla durup hiç imza atamıyordu — IAIK fallback yolu sahada hiçbir
+  zaman çalışmıyordu.
+
+  **Kök neden**: PKCS#11 v2.40 §11.4 — `C_Initialize` process-global state
+  taşır, ref-count yok. Agent hibrit yapısında SunPKCS11 (cert listeleme +
+  xades4j) ve xipki (IAIK fallback) aynı `.dylib`'i paylaşıyor; biri init
+  ettikten sonra diğeri ALREADY_INITIALIZED alıyor. `IaikPkcs11Signer#initializeIdempotent`
+  standart yolda bu kodu yakalıyordu ama AKİS yolundan ARGS_BAD nedeniyle
+  düşülen NULL-args fallback'i ALREADY_INITIALIZED'i ölümcül hata sayıp
+  re-throw ediyordu (`initializeWithNullArgs` `InvocationTargetException`
+  altındaki IAIK PKCS11Exception'ı koşulsuzca high-level xipki exception'a
+  sarıyordu). Server projesi `IaikPkcs11Module` aynı kalıbı taşıyor ama
+  HSM tarafında SunPKCS11 olmadığı için hiç tetiklenmemişti.
+
+  **Çözüm**: `initializeWithNullArgs` artık `InitOwnership` (FRESH / SHARED)
+  döner ve NULL-args yolunda ALREADY_INITIALIZED'i `InitOwnership.SHARED`
+  olarak sınıflandırıp paylaşımlı Cryptoki state'iyle devam eder; finalize
+  sahipliği eski sahibine bırakılır. Karar matrisi:
+
+  | Senaryo                                      | Sonuç                          |
+  |----------------------------------------------|--------------------------------|
+  | `forceNullInitArgs=true`                     | NULL-args, singleThreaded=TRUE |
+  | `module.initialize()` OK                     | FRESH, multi-thread            |
+  | `module.initialize()` ALREADY_INITIALIZED    | SHARED no-op, multi-thread     |
+  | `module.initialize()` ARGS_BAD (AKİS)        | NULL-args fallback             |
+  | NULL-args OK                                 | FRESH                          |
+  | NULL-args ALREADY_INITIALIZED                | SHARED no-op (sahada en sık)   |
+  | Diğer CKR_*                                  | Caller'a propagate             |
+
+  Standart yolda da ALREADY_INITIALIZED dönerse `populateModuleInfoAndVendor`
+  reflection ile `moduleInfo` + `initVendor()` populate eder; aksi halde
+  xipki vendor behaviours (EC point fix, ECDSA signature x962, vb.) sessizce
+  devre dışı kalırdı. Vendor behaviours eksikliği RSA/ECDSA imzayı bozmaz
+  ama nadir EC eğrilerinde fallback davranışlarını eksik bırakır.
+
+  **Etkilenen bileşenler**: `IaikPkcs11Signer.java` — `initializeIdempotent`
+  yeniden yazıldı; `initializeWithNullArgs` artık `InitOwnership` döner;
+  yeni helper'lar: `classifyNativeInitFailure` (package-private,
+  unit-test'lenebilir saf classifier), `populateModuleInfoAndVendor`
+  (reflection-tabanlı moduleInfo + initVendor populate). Yeni
+  `InitOwnership` enum (FRESH / SHARED) ownership semantiğini açıkça
+  ifade eder.
+
+  **Regresyon koruması**: `IaikPkcs11SignerInitTest` `classifyNativeInitFailure`
+  contract'ını 5 senaryoda doğrular (ALREADY_INITIALIZED → SHARED, diğer
+  CKR_* → xipki PKCS11Exception, IAIK olmayan cause → IllegalStateException).
+  Mevcut `IaikPkcs11SignerErrorMatchTest` etkilenmedi.
+
+- **TÜBİTAK AKİS macOS / Linux sürücüsünde `CKR_ARGUMENTS_BAD` —
+  ipkcs11wrapper `module.initialize()` çağrısında AKİS uyumluluk fallback'i
+  (server projesi `IaikPkcs11Module#initializeWithNullArgs` kalıbının agent
+  porte hali)**: `libakisp11.dylib` / `libakisp11.so` xipki'nin standart
+  `C_Initialize(CK_C_INITIALIZE_ARGS{flags=CKF_OS_LOCKING_OK})` çağrısını
+  reddedip `CKR_ARGUMENTS_BAD` döner — TÜBİTAK BİLGEM sürücüsünün macOS / Linux
+  portunda yer alan klasik bir bug; Windows portunda yok. Sahada NES Bulut
+  dual-key kartı IAIK fallback'e düştüğünde `Pkcs11LibraryException: PKCS#11
+  modülü initialize edilemedi (/usr/local/lib/libakisp11.dylib):
+  CKR_ARGUMENTS_BAD` hatası ile imza akışı duruyordu.
+
+  **Kök neden**: AKİS sürücüsü `C_Initialize` çağrısında yalnız {@code
+  C_Initialize(NULL)} formunu kabul ediyor — `CKF_OS_LOCKING_OK` flag'i set
+  edilirse arg validation reddeder. xipki `PKCS11Module.initialize()` default
+  davranışta `CKF_OS_LOCKING_OK` set ettiği için bu kombinasyon AKİS macOS /
+  Linux üzerinde her zaman patlar. Kardeş proje
+  `mersel-dss-server-signer-java` aynı patolojiyi `IaikPkcs11Module#initializeIdempotent`
+  + `initializeWithNullArgs` kalıbıyla çözmüştü.
+
+  **Çözüm**: `IaikPkcs11Signer#openOrGetModule` artık server projesinin
+  initialize-idempotent kalıbını takip ediyor:
+
+  1. Standart `module.initialize()` denenir.
+  2. `CKR_CRYPTOKI_ALREADY_INITIALIZED` → modül başka bir bileşen tarafından
+     init edilmiş; ownership=false, mevcut state kullanılır (cache'lenir).
+  3. `CKR_ARGUMENTS_BAD` → AKİS macOS / Linux NULL-args fallback'i devreye
+     girer: xipki `PKCS11Module` private `pkcs11` field'ı reflection ile alınır,
+     altındaki IAIK `PKCS11Implementation.C_Initialize(null, true)` (NULL args,
+     single-threaded) doğrudan çağrılır. Best-effort `moduleInfo` populate +
+     `initVendor` çağrıları reflection ile yapılır. PKCS#11 v2.40 §5.4 gereği
+     NULL-args mode kütüphaneyi thread-unsafe sayar — caller {@link PKCS11Token}
+     oluştururken `numSessions=1` verir (akıllı kart donanımı zaten paralel
+     oturum kaldırmaz, görünür performans kaybı yok).
+  4. Diğer `CKR_*` hatalar üst katmana yükselir (standart sınıflandırıcı
+     Pkcs11LibraryException döner).
+
+  **Operatör escape hatch**: `PKCS11_NULL_INIT_ARGS=true` env var veya
+  `-Dpkcs11.nullInitArgs=true` JVM property → standart `C_Initialize`
+  denenmeden doğrudan NULL-args yoluna gider. Auto-detect zaten devrede; bu
+  bayrak operatöre "ben biliyorum, trial-and-error'u atla" diyebilmesi için.
+  Aynı isim ve davranışla server projesinde
+  `SignatureServiceConfiguration#pkcs11NullInitArgs` olarak mevcut.
+
+  **Etkilenen bileşenler**: `IaikPkcs11Signer.java` — `MODULE_CACHE`
+  artık `PKCS11Module` yerine `ModuleEntry` (module + owned + singleThreaded)
+  taşıyor. Yeni metotlar: `initializeIdempotent`, `initializeWithNullArgs`,
+  `readForceNullInitArgsFlag`. Yeni nested classes: `ModuleEntry`,
+  `InitOutcome`. Constructor `IaikPkcs11Signer(module, token, singleThreaded)`
+  imzası genişledi.
+
+  Reflection ile çağrılan native sınıflar: `iaik.pkcs.pkcs11.wrapper.PKCS11Implementation`
+  (xipki ipkcs11wrapper JAR'ı içinde bundled, `iaik.pkcs.pkcs11.wrapper.PKCS11Exception`
+  + `CK_INFO` aynı şekilde). xipki paketlerinin internal sınıflarına bağımlılık
+  oluştu — gelecek sürümlerde (ipkcs11wrapper 1.1+) bu private API değişebilir;
+  yeni sürüme geçişte `PKCS11Module.pkcs11` field adı ve `C_Initialize(Object,
+  boolean)` imzası doğrulanmalı.
+
+- **SunPKCS11 `CKR_USER_NOT_LOGGED_IN` regresyonu — `Signature.initSign()`
+  aşamasında C_SignInit'in login state'siz yeni bir P11Session ile
+  başlatılması**: `POST /xades/sign` PIN doğru geçirildiği halde
+  `Initialization failed | root: CKR_USER_NOT_LOGGED_IN` ile patlıyordu. Trace
+  cause zinciri: `xades4j.production.SignerBES.sign → xmlsec
+  SignatureECDSA.engineInitSign → SunPKCS11 P11Signature.initialize →
+  C_SignInit → CKR_USER_NOT_LOGGED_IN`. Kullanıcı `dto.getPin()`'i geçtiği,
+  `KeyStore.load(null, pin)` çağrısı da başarılı şekilde tamamlandığı halde
+  imza başlangıcında token "henüz login olmamış" hatası dönüyordu.
+
+  **Kök neden**: SunPKCS11'in `P11SessionManager`'ı KeyStore.load çağrısında
+  açtığı P11Session'da `C_Login` yapar; ancak `Signature.initSign()`
+  çağrıldığında **yeni bir P11Session** alır. Cryptoki spec'i login state'in
+  app-wide olmasını öngörse de bazı kart sürücüleri (AKIS, SafeSign, bazı
+  Kamu SM kartları) bunu session-scoped uygular — yeni açılan session
+  unauthenticated başlar. `KeyStore.load` ile yapılan implicit login bu
+  davranışta sonraki session'lara devredilmez.
+
+  **Çözüm**: SunPKCS11 `AuthProvider.login(subject, callbackHandler)`
+  çağrısını explicit olarak ekledik. Bu çağrı, KeyStore.load'un session-bound
+  login'inin aksine, login state'i Provider objesinin yaşam süresine bağlar
+  (`Security.removeProvider`'a kadar). P11SessionManager bu noktadan sonra
+  açacağı tüm session'ları "authenticated" işaretler; `C_SignInit` artık
+  CKR_USER_NOT_LOGGED_IN almaz. Spec'e göre idempotent: zaten login ise
+  SunPKCS11 sessizce no-op yapar.
+
+  **Etkilenen kod yolları**:
+  - `XadesService#doXadesBesSign`: `keyingProvider.getSigningCertificateChain()`
+    çağrısı xades4j'in `PKCS11KeyStoreKeyingDataProvider`'ını lazy init eder
+    (provider Security registry'sine kayıt olur). Bu çağrıdan hemen sonra,
+    `signer.sign(...)` öncesinde, `Security.getProvider(jcaProviderName)` ile
+    alınan provider'a `AuthProvider.login()` çakılır. Provider AuthProvider
+    değilse (mock test ortamı) sessizce atlanır; LoginException olursa
+    `Pkcs11Session.mapKeyStoreLoadFailure(e)` ile yapılandırılır (PIN incorrect
+    vs locked vs unknown classifier).
+  - `Pkcs11Session#open`: counter-signature ve diğer custom kullanım yolları
+    için aynı pattern. `KeyStore.load` başarılı olduktan sonra explicit
+    `AuthProvider.login` çağrılır. `close()` zaten `AuthProvider.logout`
+    yapıyor — login state Provider yaşam süresine bağlanır ve close'da temiz
+    keser. `mapKeyStoreLoadFailure` API'si package-private'tan public'e
+    yükseldi (XadesService.doXadesBesSign'dan da çağrılıyor).
+
+  Bu fix IAIK fallback path'inden bağımsızdır; CKR_USER_NOT_LOGGED_IN
+  CKA_ID collision değildir. xades4j path'i AKIS / SafeSign kartlarında
+  artık doğru çalışır; CKA_ID collision'ı olan NES Bulut dual-key kartları
+  ise hâlâ IAIK PKCS#11 wrapper fallback'ine düşer.
+
+  **Sahada doğrulama sonrası ek tedbir** — `AuthProvider.login()` çağrısı
+  bazı AKİS firmware versiyonlarında `C_Login` yapsa da P11SessionManager
+  sonradan açtığı session'lara login state'i devretmiyor (sürücü
+  session-scoped davranıyor, app-wide spec'i ihlal). Bu sürücü-derinliği
+  bug'ı driver güncellemesi olmadan SunPKCS11 katmanından çözülemiyor.
+  Bu nedenle `CKR_USER_NOT_LOGGED_IN` hatası `IaikPkcs11Signer.requiresIaikFallback`
+  tetikleyici listesine eklendi: xades4j path bu hatayı verdiğinde sistem
+  otomatik olarak IAIK PKCS#11 wrapper fallback'ine düşer. IAIK kendi
+  C_Login + sign akışını yönetir, SunPKCS11 P11SessionManager hiç
+  dokunulmaz; bu yol AKİS macOS / Linux sürücüsünde stabil. Trigger ismi
+  `isDuplicateCkaIdError` → `requiresIaikFallback` olarak genelleştirildi
+  (mevcut method `@Deprecated` alias olarak korundu). Fallback log mesajı
+  hangi pattern tetiklediği bilgisini içerir (`CKR_USER_NOT_LOGGED_IN
+  (session-scoped login state, AKİS / SafeSign tipik)` vs `CKA_ID collision
+  (NES Bulut dual-key SIGN0+SIGN1)`). Tanılama bağlamı
+  `fallbackStrategy=iaik-pkcs11-sunpkcs11-bypass` (önceki ad
+  `native-pkcs11-dual-key-bypass` artık tek pattern'a özel olmadığı için
+  generic ada kavuştu).
+
+- **NES Bulut / Kamu SM dual-key (SIGN0 imzalama + SIGN1 anahtar uzlaşımı)
+  kartlarında `invalid KeyStore state: found 2 private keys sharing CKA_ID`
+  imzalama hatası**: NES Bulut Yazılım gibi tek tüzel kişiye iki imzacı
+  sertifika (DIGITAL_SIGNATURE ve KEY_AGREEMENT keyUsage'ları, EC P-384) tahsis
+  eden Mali Mühür kartlarında sürücü her iki private key'i **aynı CKA_ID
+  attribute'ı ile** yazıyor. OpenJDK 1.8 SunPKCS11
+  `sun.security.pkcs11.P11KeyStore#mapPrivateKeys()` her iki anahtarı tek alias
+  altında map etmeye çalıştığında — alias map collision'ı — uniqueness check
+  fail ediyor ve `KeyStoreException: invalid KeyStore state: found 2 private
+  keys sharing CKA_ID 0x...` fırlatıyor. Hata cert seçim mantığına gelinemeden
+  `KeyStore.load()` aşamasında atıldığı için kullanıcının `certificateId`
+  parametresiyle "doğru cert"i seçtiği akış dahi devreye giremiyor; xades4j
+  cause zinciri `SignatureOperationException → UnexpectedJCAException →
+  KeyStoreException` olarak yığılıyor.
+
+  Üstelik bu davranış JDK 9+'da relaxed (`P11KeyStore` aynı CKA_ID'li
+  private/public key pair'lerine tolere edebilir hale geldi) ama JDK 1.8'de
+  fix yok; JDK 1.8'i bırakamadığımız (PCSC + masaüstü uyumluluk) sürece
+  workaround zorunlu.
+
+  **Mimari karar — IAIK PKCS#11 Wrapper'a geçiş**: Kardeş proje
+  `mersel-dss-server-signer-java` bu problemi `8c39919` commit'inde IAIK PKCS#11
+  wrapper'ı (`org.xipki:ipkcs11wrapper`, IAIK Graz 1.6.8 kod tabanından
+  türetilen Apache 2.0 forku) entegre ederek çözdü. Agent ilk turda ek
+  bağımlılıktan kaçınmak için `sun.security.pkcs11.wrapper.PKCS11` low-level
+  JNI sarmalayıcısına reflection ile inen bir prototip denedi; ancak şu
+  gerekçelerle IAIK yoluna geçildi:
+
+  1. **JDK 17+ uyumu**: `sun.security.pkcs11.wrapper.*` Jigsaw modüller
+     sistemiyle `jdk.crypto.cryptoki` modülünün dışına kapatıldı. Reflection
+     erişimi JDK 17+'da `--add-exports=jdk.crypto.cryptoki/sun.security.pkcs11.wrapper=ALL-UNNAMED`
+     JVM argümanı gerektirir; jpackage launcher boyu sürekli güncellenmesi
+     gereken bir bağlılık. IAIK wrapper kendi JNI bridge'ini (jar içinde
+     bundled `natives/{unix,windows}/...libpkcs11wrapper`) kullanır,
+     JDK internal'ına HİÇ ihtiyaç duymaz; `add-exports` gerekmez.
+  2. **Server-agent paritesi**: HSM (server) ve smart-card (agent) imzalama
+     akışları artık aynı PKCS#11 katmanına iner. Aynı kod kalıbı
+     (`open → findSigner → sign → close`), aynı hata sınıflandırma şeması,
+     aynı tanılama vokabüleri.
+  3. **API kalitesi**: Reflection prototipi `CK_ATTRIBUTE[]` template
+     kurulumlarını, `CK_MECHANISM(long)` ctor binding'lerini, manuel
+     `Object.getClass()` introspection'larını gerektiriyordu. IAIK'in
+     `AttributeVector.newPrivateKey().id(bytes).sign(true)` fluent API'si
+     aynı işi 50+ satır daha az kodla yapıyor; mock'lanması da kolay.
+  4. **Maliyet**: JAR ~2.3 MB. Tüm platform JNI binary'leri (macOS universal,
+     Linux x86_64/arm/arm64, Windows x86_64/x86) zaten bundled — jpackage
+     installer'a ek native dosya kopyalanmıyor. Shaded JAR büyümesi %5-8;
+     ihmal edilebilir.
+
+  Reflection katmanı (`Pkcs11Reflection.java`) PIN'siz cert listing için
+  korunuyor — listing akışı patolojik değil; SunPKCS11 P11KeyStore'a hiç
+  dokunmadığı (`C_FindObjects` doğrudan native) için CKA_ID collision'dan
+  etkilenmiyor.
+
+  **Yeni bileşenler**:
+  - `IaikPkcs11Signer.java`: `org.xipki:ipkcs11wrapper` üzerine inşa edilen
+    AutoCloseable PKCS#11 imzalama istemcisi. `open(libPath, pin)` →
+    `PKCS11Module.getInstance(libPath).initialize()` (lib path → module JVM
+    yaşam boyu cache'lenir; `CKR_CRYPTOKI_ALREADY_INITIALIZED` toleranslı) +
+    `new PKCS11Token(token, readOnly=false, pin)` (ctor C_Login dahil eder),
+    `findSigningKey(certId)` → `AttributeVector.newX509Certificate()` template
+    ile cert tarama + identifier match (CKA_LABEL / CKA_ID hex / X.509 serial /
+    SHA-1 thumbprint), `AttributeVector.newPrivateKey().id(certIdBytes)`
+    template'iyle private key tarama + aynı CKA_ID üzerindeki birden çok key'i
+    `CKA_KEY_TYPE` (cert public key tipine eşle) + `CKA_SIGN=TRUE`
+    filtreleriyle ayrıştırma (NES Bulut SIGN0 doğru, SIGN1 elenir),
+    `sign(key, pkcs11Mechanism, data)` → `PKCS11Token#sign(Mechanism, handle,
+    data)`. Static yardımcı `isDuplicateCkaIdError(Throwable)` cause zincirini
+    cycle-safe (LinkedHashMap ile loop detection) gezerek "invalid KeyStore
+    state" + "CKA_ID" pattern'ini eşleştirip fallback dispatch'i tetikler.
+    JVM shutdown hook tüm cached `PKCS11Module`'leri toplu finalize eder.
+  - `XadesService#doXadesBesSignNative`: SunPKCS11 P11KeyStore'a hiç dokunmayan
+    manuel XAdES-BES enveloped imza akışı. Apache Santuario 2.x'in
+    `org.apache.xml.security.signature.XMLSignature` low-level API'sini
+    kullanarak DOM iskeletini kurar (Reference[0] = URI="" + Enveloped
+    transform, Reference[1] = #SignedProperties + c14n, KeyInfo =
+    `<ds:X509Data>` + `<ds:KeyValue>` cert public key tipine göre
+    RSAKeyValue/ECKeyValue dispatch, Object =
+    QualifyingProperties/SignedProperties:SigningTime+SigningCertificate),
+    `SignedInfo.generateDigestValues()` ile Reference DigestValue'ları
+    PrivateKey gerektirmeden yazılım tarafında hesaplar,
+    `SignedInfo.getCanonicalizedOctetStream()` ile canonical bytes'ı alır,
+    software SHA-256 (RSA) / SHA-384 (EC) hash eder. RSA için EMSA-PKCS1-v1_5
+    DigestInfo (RFC 8017 §9.2) prefix'i öne ekleyip `CKM_RSA_PKCS` ile,
+    EC için ham hash'i `CKM_ECDSA` ile IAIK üzerinden imzalar. Ham byte'lar
+    Base64'lenip `<ds:SignatureValue>` text content'ine inject edilir.
+    Tanılama bağlamı `fallbackStrategy=native-pkcs11-dual-key-bypass`,
+    `resolvedJcaSignature=RAW-RSA-NATIVE|RAW-ECDSA-NATIVE`,
+    `resolvedPkcs11Mechanism=CKM_RSA_PKCS|CKM_ECDSA` ve "SunPKCS11 P11KeyStore
+    dual-key CKA_ID çakışması tespit edildi; native PKCS#11 imza yoluna
+    düşüldü." uyarısı ile zenginleştirilir.
+
+  **Dispatch logic**: `XadesService#signXmlDocument` try/catch chain xades4j
+  path'in attığı her hatayı `IaikPkcs11Signer.isDuplicateCkaIdError(e)` ile
+  test eder; eşleşirse `doXadesBesSignNativeWithDiag` sarmalayıcısı üzerinden
+  IAIK path'e geçer. IAIK path da çuvallarsa hem orijinal xades4j hatasını
+  `addSuppressed` ile koruyup hem IAIK cause'u primary olarak raporlar
+  (destek logları kök neden zincirini görsün diye). Pattern matching CKA_ID
+  haricindeki hatalarda (PIN incorrect, EC parameters, mekanizma uyumsuzluğu)
+  asla tetiklenmez — bu durumlar mevcut tek-yol akışlarıyla doğru
+  yönlendirilir.
+
+  Counter-signature akışı (`signHrXmlCounterSignature`) henüz IAIK path'e
+  taşınmadı; mevcut `<ds:Signature>`'a injection mantığı XAdES-BES enveloped
+  imzadan farklı (existing `<ds:SignatureValue>` reference'lanır, başka
+  bir signature element ağacına `<xades:CounterSignature>` enjekte edilir) ve
+  ayrı bir refactor gerektiriyor. Bu kart tipi için counter-signature
+  çağrısında erken `SIGNATURE_FAILED` ile açıklayıcı hata mesajı +
+  remediation: kullanıcı `/xades/sign` enveloped sign endpoint'ini
+  kullanmalı.
+
+  **Bağımlılık**: `pom.xml` `org.xipki:ipkcs11wrapper:1.0.9` (Tem 2024, son
+  release; commit Kas 2024'e kadar aktif). Lisans: xipki kod Apache 2.0;
+  orijinal IAIK Graz kodu 5-clause BSD-tipi (ticari kullanım serbest, ürünün
+  açıklamalarında "This product includes software developed by IAIK of Graz
+  University of Technology." attribution gerekiyor — `LICENSE` / `NOTICE`
+  dosyalarına eklenecek).
+
+  Test matrisi:
+  - `IaikPkcs11SignerErrorMatchTest` (7 test): SunPKCS11 hata mesajı
+    pattern'ini cause zinciri varyasyonlarıyla (KeyStoreException doğrudan,
+    SignerException wrap, çoklu özel sayı varyasyonları "3 PRIVATE KEYS
+    SHARING") doğrular; PIN/EC hatalarında yanlış pozitif vermez; self-cause
+    döngülerine karşı cycle-safe.
+  - `XadesServiceNativeFallbackTest` (6 test): `rsaDigestInfo()` PKCS#1 v1.5
+    EMSA prefix byte'larını SHA-256 / SHA-384 için RFC 8017 §9.2 ile
+    karşılaştırır, `estimateKeySizeBits()` RSA modül / EC field bit'lerini
+    Mockito ile RSA-2048 / EC P-384 senaryolarında kanıtlar.
+  - `XadesServiceDispatchTest` (3 test): `signXmlDocument` Mockito spy ile
+    xades4j patladığında IAIK path'e döndüğünü, ilgisiz hatada
+    (CKR_PIN_INCORRECT) IAIK'in çağrılmadığını, IAIK de patladığında
+    kullanıcıya iki katmanlı hata mesajı + suppressed orijinal cause
+    raporladığını kilitler.
+
+- **RSA / EC imzacı sertifikalarda `ds:KeyInfo` zenginleştirmesi (XAdES-BES
+  TÜBİTAK kılavuzu uyumu)**: Sahada hem RSA-2048 hem EC P-384 (NIST secp384r1)
+  imzacı sertifikaları yaygın; ancak xades4j default'unda
+  `BasicSignatureOptions.includePublicKey=false` olduğu için `ds:KeyInfo`
+  yalnız `<ds:X509Data><ds:X509Certificate>` içeriyordu. TÜBİTAK XAdES
+  uygulama kılavuzu KeyInfo'nun ek olarak `<ds:KeyValue>` blogu da içermesini
+  bekler. **Çözüm**: hem ana xades4j akışı (`XadesService#doXadesBesSign`) hem
+  JSR 105 counter-signature akışı (`XadesService#doCounterSignature`) artık
+  cert public key tipine göre KeyInfo'yu zenginleştiriyor:
+  - RSA cert → `<ds:KeyValue><ds:RSAKeyValue><ds:Modulus/><ds:Exponent/></ds:RSAKeyValue></ds:KeyValue>`
+    (xmldsig namespace `http://www.w3.org/2000/09/xmldsig#`)
+  - EC  cert → `<ds:KeyValue><dsig11:ECKeyValue
+    xmlns:dsig11="http://www.w3.org/2009/xmldsig11#"><dsig11:NamedCurve
+    URI="urn:oid:..."/><dsig11:PublicKey>...</dsig11:PublicKey></dsig11:ECKeyValue></ds:KeyValue>`
+    (XML-DSig 1.1 namespace; KURUM02 EC P-384 için `urn:oid:1.3.132.0.34`,
+    P-256 için `urn:oid:1.2.840.10045.3.1.7`, P-521 için `urn:oid:1.3.132.0.35`)
+
+  Bu branch dispatch'i Apache xmlsec 2.2.3'ün
+  `org.apache.xml.security.keys.content.KeyValue` ctor'unda hazır (line 92-115:
+  `instanceof RSAPublicKey` / `instanceof ECPublicKey`); xades4j tarafında
+  yalnız `XadesBesSigningProfile#withBasicSignatureOptions(new BasicSignatureOptions()
+  .includeSigningCertificate(SigningCertificateMode.SIGNING_CERTIFICATE)
+  .includePublicKey(true))` çağrısı; counter-sig tarafında ise
+  `KeyInfoFactory#newKeyValue(signingCert.getPublicKey())` çağrısı yeterli.
+  Cert sertifika modu yine `SIGNING_CERTIFICATE` (zincir değil tek imzacı —
+  TÜBİTAK kılavuzuyla uyumlu, certificate-chain leak'i yok). Server-side kardeş
+  proje (`mersel-dss-server-signer-java/src/main/java/eu/europa/esig/dss/xades/
+  signature/XAdESSignatureBuilder.java`) tamamen DSS'e geçtikten sonra aynı
+  zenginleştirmeyi DSS'in `XAdESSignatureBuilder` sınıfını shadow ederek
+  `addRSAKeyValue` / `addECKeyValue` private metotlarıyla manuel kuruyor;
+  agent xades4j path'inde kalacağı için bu davranışı xmlsec'in zaten hazır
+  olan key-type dispatch'inden tek satır config ile ücretsiz alır. Test
+  matrisi: `XadesKeyInfoEnrichmentTest` Kamu SM test PFX'leriyle (KURUM01
+  RSA-2048 + KURUM02 EC P-384) end-to-end imzalama yapıp counter-signature
+  KeyInfo'sundaki Modulus/Exponent ve NamedCurve URI/PublicKey değerlerini
+  kilitler.
+
+- **AKIS / SafeSign opaque PKCS#11 private key'leri için `Supplied key is not a
+  RSAPrivateKey instance` regresyonu (kritik imzalama hatası)**: AKIS v2.5
+  (firmware) gibi CKA_SENSITIVE=true RSA private key tutan kartlarda — yani
+  modulus / private exponent attribute'larının token-out extraction'a kapalı
+  olduğu tüm akıllı kartlarda — `POST /xades/sign` çağrısı `SIGNATURE_FAILED:
+  XAdES-BES imzalama başarısız: Supplied key
+  (sun.security.pkcs11.P11Key$P11PrivateKey) is not a RSAPrivateKey instance`
+  ile başarısız oluyordu. Trace cause zinciri kök kaynağı gösteriyordu:
+  `xades4j.XAdES4jXMLSigException → org.apache.xml.security.signature.XMLSignatureException
+  → java.security.InvalidKeyException` (BouncyCastle'ın
+  `org.bouncycastle.jcajce.provider.asymmetric.rsa.DigestSignatureSpi`'sından
+  fırlatılıyor). Kök neden: önceki commit'in `BouncyCastleSetup` ile BC'yi
+  JCA pozisyon 1'e yerleştirmesi sonrası, xmlsec 2.2.3 `SignatureBaseRSA`'nın
+  ctor'undaki `Signature.getInstance(algorithmID)` çağrısı provider'sız
+  yapılıyor, JCA chain BC'yi (pos 1) seçiyor ve BC'nin RSA Signature SPI'sı
+  `key instanceof RSAPrivateKey` kontrolünü pas geçemiyor — çünkü token RSA
+  private key material'ını dışarı vermeyince SunPKCS11 generic
+  `P11Key$P11PrivateKey` base class'ını döner; ne `RSAPrivateKey` ne
+  `ECPrivateKey` arayüzlerini implement etmez. **Çözüm**:
+  `XadesService#doXadesBesSign` artık `signer.sign(...)` çağrısını
+  `org.apache.xml.security.algorithms.JCEMapper#setProviderId(jcaProviderName)`
+  try/finally bloğuna sarmalıyor (`jcaProviderName = "SunPKCS11-" + ourConfigName`).
+  xmlsec'in `SignatureBaseRSA` / `SignatureECDSA` constructor'ları
+  `JCEMapper.providerId` set olduğunda `Signature.getInstance(algorithmID,
+  providerId)` formunu çağırır — bu çağrı doğrudan SunPKCS11 provider'ına
+  düşer; SunPKCS11'in `P11Signature` implementasyonu P11Key'i (her alt-sınıfı
+  dahil) doğrudan kabul edip `C_Sign`'a yönlendirir, kontrol asla
+  `instanceof RSAPrivateKey` testine ulaşmaz. Sensitive private key material'ı
+  asla kartı terk etmez. Bonus düzeltme: cert public key tipi (RSA / EC) artık
+  `keyingProvider.getSigningCertificateChain()` eagerly çağrılarak öğreniliyor
+  ve {@link SignatureProfileResolver}'a doğru `keyHint` (`"RSA"` ya da
+  `"EC"`) veriliyor — önceden hardcoded `"RSA"` idi ve EC sertifikalı
+  kartlarda yanlış mekanizma seçimine yol açıyordu (sahada AKIS / SafeSign
+  hem RSA hem EC sertifika kombinasyonu yaygın). Server-side kardeş projede
+  (`mersel-dss-server-signer-java` @ `b38f88d`) aynı RSA-vs-EC branching kalıbı
+  daha önce uygulanmıştı; ancak JCEMapper bridge agent-side'da yeni — server
+  daha sonra DSS 2-faz API + IAIK Native PKCS#11 backend'ine (`8c39919`)
+  geçerek tüm JCA path'ini bypass etti, agent ise xades4j yolunu koruyacağı
+  için bu bridge kalıcı çözüm.
+- **AKIS / EC objesi taşıyan kartlarda `Only named ECParameters supported`
+  patolojisi (kritik imzalama regresyonu)**: AKIS v2.5 gibi RSA imzalama
+  anahtarına ek olarak EC objesi (EC private/public key veya EC sertifika)
+  taşıyan akıllı kartlarda `POST /xades/sign` çağrısı tutarsız şekilde
+  `SIGNATURE_ALGORITHM_UNSUPPORTED: XAdES-BES imzalama başarısız:
+  Unsupported parameters | root: Only named ECParameters supported` ile
+  başarısız oluyordu. Trace cause zinciri kök nedeni gösteriyordu:
+  `xades4j.UnexpectedJCAException → java.security.KeyStoreException →
+  java.io.IOException("Only named ECParameters supported")`. Kök neden:
+  JDK 1.8 `SunEC` SEC 1 `ECParameters` CHOICE'unun yalnız `namedCurve`
+  arm'ını destekler; AKIS firmware'i `CKA_EC_PARAMS` attribute'unu
+  **explicit** formda döndürür. SunPKCS11 `P11KeyStore.engineLoad()`
+  sırasında karttaki tüm objeleri enumerate eder; EC objesi parse'ı için
+  provider belirtmeden `AlgorithmParameters.getInstance("EC")` çağırır
+  ve JCA arama sırası `SunEC`'ye düşüp tüm keystore load'u devirir —
+  gerçek imzalama RSA bile olsa. **Çözüm**: yeni
+  `io.mersel.dss.agent.api.services.keystore.BouncyCastleSetup` utility'si
+  ilk SunPKCS11 oluşturulmadan önce {@link
+  org.bouncycastle.jce.provider.BouncyCastleProvider}'ı JCA pozisyon 1'e
+  yerleştirir ve `SunEC`'yi `Security.removeProvider` ile kaldırır. BC
+  hem named hem explicit EC parametre formunu destekler; service cache'i
+  EC için BC'ye düşer ve `engineLoad` artık patlamaz. Setup üç giriş
+  noktasında idempotent olarak çağrılır:
+  - `Pkcs11Session#open` — `POST /pades/sign`, `/xades/sign/counter`,
+    `/smartcard/pin/validate` ortak ana akışı.
+  - `XadesService#doXadesBesSign` — xades4j
+    `PKCS11KeyStoreKeyingDataProvider` kendi SunPKCS11'ini ayağa
+    kaldırdığı `/xades/sign` xades4j akışı (bu commit'teki trace'in
+    geldiği yer).
+  - `Pkcs11ModuleProbe#defaultSunPkcs11Probe` — L3 kart vendor probe'unun
+    PIN'siz `ks.load(null, null)` denemesi (kartta public EC sertifikası
+    varsa probe yanlış-negatif dönüp L3 down-rank'a sebep olabiliyordu).
+  Etki: AKIS kartlarında yıllardır tezgâh-altı düzeltme olarak süren
+  "JVM yolundan `SunEC`'yi çıkar" workaround'u artık kütüphane içinde,
+  her PKCS#11 girişinde otomatik uygulanıyor. Sunucu-tarafı kardeş projede
+  (`mersel-dss-server-signer-java` @ `b38f88d`) aynı kalıp daha önce
+  uygulanmıştı; agent tarafıyla davranış paritesi sağlandı.
+
+### Added
+
+- **İmzalama tanılama altyapısı (Signature Diagnostics)**: AKIS / SafeSign /
+  Aladdin gibi farklı kart firmware'lerinde `SIGNATURE_FAILED: Unsupported
+  parameters` hatasının kökünü tek atışta bulup çözmek için kapsamlı bir
+  tanılama katmanı eklendi. Dört bileşen birlikte çalışır:
+  - **TraceId + cause chain (Bileşen A)**: Her HTTP isteğine
+    `TraceIdFilter` aracılığıyla `X-Mersel-Trace-Id` UUID'si üretilir; aynı
+    değer MDC'ye yazılır (logback pattern'inde `[%X{traceId:--}]` olarak
+    görünür) ve `ErrorModel.traceId` alanına basılır. `ErrorModel.causeChain`
+    (yeni alan) cause zincirini düz, JSON dostu `[{type, message}]` listesi
+    olarak rapor eder — `SIGNATURE_FAILED` opak mesajının ardındaki
+    `InvalidAlgorithmParameterException → CKR_MECHANISM_INVALID` zinciri
+    artık kullanıcıya tek atışta görünür. Kapatmak için
+    `mersel.signer.diagnostics.expose-cause-chain=false`.
+  - **Mekanizma probe (Bileşen B)**: `Pkcs11MechanismProbe` token'ın
+    desteklediği `CKM_*` mekanizmalarını ve token meta bilgilerini (label,
+    manufacturer, model, firmware sürümü, maskelenmiş seri no) PIN
+    HARCAMADAN okur. `GET /smartcard/mechanisms?terminalName=...` ucu bu
+    çıktıyı + RSA/ECDSA için XAdES profil önerisini birlikte döner; frontend
+    imzalama akışından önce kullanıcıya "kartınız XAdES-BES için uygun" ya da
+    "firmware'iniz `CKM_SHA256_RSA_PKCS` desteklemiyor" gibi proaktif uyarı
+    gösterebilir.
+  - **Mekanizma-aware algoritma seçimi (Bileşen D)**: `XadesService` artık
+    her imzalama çağrısında `SignatureProfileResolver` üzerinden token'ın
+    gerçek mekanizma listesine göre xades4j `AlgorithmsProviderEx`'i seçer.
+    Modern AKIS firmware'i `CKM_SHA256_RSA_PKCS`'i destekliyorsa
+    `rsa-sha256` URL'i kullanılır; eski firmware sadece `CKM_RSA_PKCS` (raw)
+    veriyorsa `raw-rsa-soft-digest` fallback'i devreye girer; SHA-1 only
+    durumunda ETSI deprecation uyarısıyla `rsa-sha1-only` modu seçilir.
+    Sertifika ECDSA ise `CKM_ECDSA_SHA384` öncelikli ECDSA profili
+    uygulanır. Hiçbir uyumlu mekanizma yoksa `SIGNATURE_FAILED` yerine
+    `SIGNATURE_ALGORITHM_UNSUPPORTED` (yeni hata kodu) +
+    `signatureDiagnostics.remediation` listesi (firmware güncelleme
+    yönlendirmesi) döner — frontend artık doğru aksiyon ekranını gösterebilir.
+  - **Sign-probe ve support-bundle uçları (Bileşen C + E)**:
+    `POST /diagnostics/sign-probe` PIN'siz dry-run'la "bu kart imzalayabilir
+    mi?" sorusunu yanıtlar (RSA + ECDSA dalları ayrı ayrı raporlanır).
+    `GET /diagnostics/support-bundle` ZIP olarak çıktı verir: app sürümü,
+    JVM/OS özet, PCSC tanılaması, takılı her kart için mekanizma listesi ve
+    sign-probe sonucu. PII içermez (PIN ve kart serisi tam asla pakete
+    girmez). Kullanıcı destek talebine bu ZIP'i iliştirir; destek operatörü
+    5 dakikada sorunu tespit eder.
+- **`ErrorModel`'e `signatureDiagnostics` alanı**: kart tipi, ATR, lib yolu,
+  kullanılan/karta gönderilen `CKM_*`, JCA imza adı, fallback stratejisi,
+  uyarılar ve aksiyon listesi imzalama hatası yanıtlarında bu objede
+  toplanır. `@JsonInclude(NON_NULL)` ile sadece dolu alanlar yanıta yazılır.
+- **In-app Tanılama Paneli (Diagnostics Panel)**: HTTP yanıtlarına ek olarak
+  trace/destek verisini uygulamanın masaüstü UI'ından da canlı izleyebilmek
+  için yeni bir Swing paneli eklendi. Mimari özet:
+  - **`TraceRecorder` ring buffer**: Her HTTP isteği tamamlandığında yeni
+    `TraceRecordingFilter` (sıra: `TraceIdFilter`'dan hemen sonra)
+    `TraceRecord` üretir — traceId, method, path, statusCode, durationMs,
+    sanitized query, errorCode, exceptionType, cause chain ve (varsa)
+    `signatureDiagnostics` alanlarıyla. Buffer thread-safe, varsayılan 200
+    kapasite ile bounded; dolduğunda en eski düşürülür. PIN, ham gövde,
+    sertifika içeriği ASLA buraya yazılmaz; query string'de `pin`,
+    `password`, `token`, `apikey`, `certificateId` gibi anahtarlar
+    otomatik `***` ile maskelenir; uzak IP son okteti maskelenir
+    (loopback hariç). Aç/kapa toggle: `mersel.signer.diagnostics
+    .trace-recorder.enabled` (default `true`). Kapasite override:
+    `mersel.signer.diagnostics.trace-recorder.capacity` (default `200`).
+  - **REST uçları**: `GET /diagnostics/traces?limit=&errorOnly=` en yeni →
+    en eski sırayla kayıtları + sayaç istatistiklerini döner;
+    `DELETE /diagnostics/traces` buffer'ı temizler (sayaçlar korunur);
+    `POST /diagnostics/traces/enabled?enabled=true|false` recorder'ı
+    runtime'da aç/kapa.
+  - **Masaüstü `DiagnosticsPanel` — yeniden tasarım (modern Swing UI)**:
+    `MainWindow`'daki "Geliştirici araçları" satırına ve tray menüsüne
+    eklenen "Tanılama paneli" item'ı, MainWindow paletine (slate tonları)
+    oturan modeless Swing dialog'unu açar. Layout dört bölümdür:
+    (1) **Header** — başlık + alt açıklama (PII garanti notu).
+    (2) **Toolbar** — surface tonlu sticky bant: arama input'u (path /
+    errorCode / traceId üzerinde live filter), "Yalnız hatalar" chip'i,
+    "Tanılama kaydı açık" toggle'ı (recorder runtime aç/kapa) ve
+    "Buffer'ı temizle" ghost-danger butonu (onay kutulu).
+    (3) **Master/detail split** — üst paneldeki yüksek satırlı
+    `JTable`'da method (GET=mavi, POST=yeşil, PUT/PATCH=turuncu,
+    DELETE=kırmızı) ve status (2xx=yeşil, 3xx=mavi, 4xx=turuncu,
+    5xx=kırmızı) için custom **rounded pill renderer**'lar; alternate
+    stripe satır arkaplanı; trace ID için monospace; süre sayısal
+    sıralanır; hata kodu boş değilse kırmızı bold. Alt panelde 4 sekmeli
+    detay: **Özet** (key/value grid: traceId, başlangıç, method, path,
+    sanitised query, status, süre, uzak adres, errorCode, errorMessage,
+    exceptionType), **Hata zinciri** (her frame için kart: tip + mesaj),
+    **İmzalama tanılaması** (`signatureDiagnostics` pretty JSON),
+    **Ham JSON** (kopyalanabilir). Buffer ya da filtre sonucu boşsa
+    `CardLayout` üzerinden **empty-state overlay** ("Henüz trace kaydı
+    yok / health/ping kayıt dışı tutulur") gösterilir.
+    (4) **Footer** — sayaç bandı ("N görünür · N toplam · kapasite N ·
+    düşürülen N · kayıt AÇIK/KAPALI") ve sağda "JSON'u kopyala",
+    "Dışa aktar (.json)", "Tümünü dışa aktar (.ndjson)" eylemleri.
+    Klavye kısayolu **Ctrl/Cmd+W** paneli kapatır, **Ctrl/Cmd+C** seçili
+    kaydın JSON'unu pano'ya kopyalar. Listener pub/sub ile yeni kayıtlar
+    EDT'de canlı olarak tabloya `prepend` edilir; recorder kilidi UI
+    thread'ini bloklamaz. Headless ortamda no-op.
+  - **Gürültü filtresi — health/ping otomatik skip**: Frontend ya da
+    uptime monitor'lar saniyede onlarca `/actuator/health`, `/health`,
+    `/ping`, `/favicon.ico`, `/error` isteği atabildiği için bunlar
+    artık `TraceRecordingFilter` seviyesinde **kayıt dışında** tutulur;
+    ne ring buffer'a ne UI tanılama paneline ne de support bundle'a
+    düşer (gerçek API trafiğinin ringden düşürülmesi engellenir).
+    Karşılaştırma case-sensitive prefix match'tir ve path boundary'sine
+    duyarlıdır (`/healthcare`, `/healthy-records` gibi yollar yanlışlıkla
+    skip edilmez). Liste config ile override edilebilir:
+    `mersel.signer.diagnostics.trace-recorder.skip-paths` (CSV) veya
+    `MERSEL_AGENT_TRACE_RECORDER_SKIP` env değişkeni; `none` veya `off`
+    token'ı görüldüğünde tüm filtre devre dışı kalır (her şey kaydedilir).
+  - **Destek paketinde recent-traces.json**: `GET /diagnostics/support-bundle`
+    çıktısına `recent-traces.json` dosyası eklendi — son 100 kayıt + sayaç
+    özeti destek operatörüne giderken pakete dahil olur. PII filtreleri
+    aynı sıkılıkta uygulanır.
+
+## [1.0.6] — 2026-06-02
+
+### Fixed
+
+- **Kritik: `IaikPkcs11Signer.locatePrivateKey` yanlış anahtarla imzalama riski
+  (dual-key kartlar)** — sahada NES Bulut / Kamu SM dual-key (SIGN0 imzalama +
+  SIGN1 anahtar uzlaşımı) setup'larında her iki anahtar aynı CKA_ID ile yazıldığı
+  için SunPKCS11 JCA akışı patladıktan sonra IAIK fallback'ine düşülüyordu.
+  IAIK tarafında `locatePrivateKey` CKA_ID/CKA_LABEL match'i olmasa bile
+  `handles[0]` (ilk rastgele private key) ile devam ediyordu — yani SIGN0 yerine
+  SIGN1 anahtarıyla imza üretilebilir, imza geçersiz olabiliyor.
+
+  Artık `firstAnyMatch` (cert ile eşleşmeyen ilk handle) fallback'i kaldırıldı;
+  cert ile eşleşmeyen hiçbir private key yoksa `CertificateLookupException`
+  fırlatılıyor. CKA_SIGN=TRUE tercih hâlâ korunuyor.
+
+- **`XadesService.certificateDigestBase64` SHA-512 / SHA-1 sessiz düşürme
+  bug'ı** — `SignatureProfileResolver.chooseAlgorithms` SHA-512 ve SHA-1
+  seçebildiği halde `certificateDigestBase64` sadece SHA-256/SHA-384 biliyor;
+  geri kalanlar sessizce SHA-256'ya düşüyordu → digest tutarsız, imza XAdES
+  doğrulamasında reddediliyordu. Artık SHA-512 + SHA-1 de destekleniyor.
+
+- **`Pkcs11Session.open` sadece `LoginException` yakaladığı için SunPKCS11
+  resource leak** — bazı SunPKCS11 patolojilerinde (CKR_FUNCTION_FAILED vb.)
+  `ProviderException` fırlatılıyor, `LoginException` catch bunu yakalamıyordu:
+  `Security.removeProvider()` + `silentDelete(configFile)` atlanıyor, kalıcı
+  provider registry kirliliği ve `/tmp` dosya sızıntısı oluşuyordu. Catch
+  genişletildi.
+
+- **`expose-cause-chain` default `true` → `false`** — error yanıtlarında cause
+  zinciri varsayılan artık basılmıyor. Cause zinciri PIN/path/host bilgisi
+  sızma riski taşıyordu. Açmak için `MERSEL_AGENT_EXPOSE_CAUSE_CHAIN=true`.
+
+- **Counter-signature try-with-resources yanlış fallback routing** —
+  `Pkcs11Session.close()` hatası imza body'sinin üzerinde suppress edildiği
+  için outer `catch (RuntimeException)` bunu IAIK fallback değerlendirmesine
+  sokabiliyordu. Explicit try/finally ile body ve close hataları izole
+  edildi; close hatası sadece log'lanır.
+
+- **`JCEMapper.setProviderId` race condition** — global static state multi-thread
+  imzalamada yarışa yol açıyordu. `synchronized (XadesService.class)` ile
+  korumaya alındı.
+
+- **`MechanismCapabilityService` ↔ `SignatureProfileResolver` tablo duplikasyonu**
+  — iki ayrı CKM→URL mapping tablosu tutuluyordu, biri değişirse diğeri drift
+  ediyordu. `MechanismCapabilityService.buildSummary` artık
+  `SignatureProfileResolver.chooseAlgorithms`'a delege ediyor; tek otorite.
+
+- **`Pkcs11MechanismProbe.scanCertificates` `Integer.MAX_VALUE` limit** — bazı
+  sürücülerde sorun çıkardı; `MAX_OBJECT_LIST = 1000` ile sınırlandı.
+
+- **`TraceRecord.isSensitiveKey` tam eşleme restrictive** — `userPin`,
+  `card_pin`, `APIKEY`, `x-token` gibi varyantlar maskelenmiyordu. Substring /
+  case-insensitive matching yapıldı, ek olarak `credential` eklendi.
+
+- **`SignerException.diagnostics` `Object` tiplemesi** — `Object` yerine
+  `SignatureDiagnostics` tipli alan; runtime `instanceof` kontrolü kaldırıldı.
+
+### Removed
+
+- **Geriye uyumluluk yıktı (major cleanup)**: Kullanılmayan / duplicate
+  ctor'lar, dead code ve deprecated API'lar kaldırıldı. Etkilenenler:
+
+  - `IaikPkcs11Signer`: `singleThreaded` field, `isDuplicateCkaIdError`,
+    `attributeBytes` helper (inline'a alındı).
+  - `Pkcs11Session`: `getPin()`, `newPasswordCallback()`, `invokeOptionalLogout`.
+  - `Pkcs11Errors.unwrapInvocationCause`.
+  - `Pkcs11Reflection`: `tokenInfoCls`, `mechanismInfoCls`, `classForNameSilent`.
+  - `XadesService`: 2-arg ctor, 2-arg `signHrWithSession` overload.
+  - `SmartCardController`: 3-arg ctor, `mechanismCapabilityService == null` ISE branch.
+  - `SystemTrayManager`: 3-arg ve 5-arg ctor (sadece 6-arg kaldı).
+  - `MainWindow`: 4-arg ctor (sadece 5-arg kaldı).
+  - `MainWindowLifecycle.show`: 4-arg overload (sadece 5-arg kaldı).
+  - `DesktopUiBootstrap`: 6-arg ctor (sadece 7-arg kaldı).
+  - `TraceRecorder`: no-arg ctor.
+  - `GlobalExceptionHandler`: no-arg ctor.
+  - `DiagnosticsPanelPreviewMain` (test fixture duplicate) silindi.
+
+### Changed
+
+- `pom.xml`: `ipkcs11wrapper` versiyonu `<ipkcs11.version>` property'sine
+  taşındı; diğer dependency version property'leri ile tutarlı.
+- `NOTICE`: pom.xml'de bulunmayan "Apache POI" ve "Jakarta XML Binding"
+  atıfları kaldırıldı.
 
 ## [1.0.5] — 2026-06-01
 
@@ -38,7 +719,7 @@ standardına dayanır; sürüm numaralandırması
   gerektirir ve PIN her istekte client'tan gelir; kötü niyetli site PIN'i
   bilemez. `GET /smartcard/certificate` PIN'siz çalışır ve TC kimlik /
   VKN / ad-soyad içerir — açık CORS bunları cross-origin okutabilir.
-  Bu vektörü tamamen kapatmak için ileride **Host header allowlist filter**
+    Bu vektörü tamamen kapatmak için ileride **Host header allowlist filter**
   (DNS rebinding mitigation; `Host` header'ı `localhost` / `127.0.0.1` /
   `[::1]` değilse 403) eklenebilir; planlanan ek hardening adımı.
 

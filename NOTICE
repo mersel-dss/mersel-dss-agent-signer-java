@@ -97,14 +97,48 @@ implication of endorsement or sponsorship as required by Section 4.
 
 src/main/java/tr/com/cs/ altındaki kaynaklar ile pom.xml içinde
 bildirilen runtime bağımlılıkları (BouncyCastle, iText, xades4j,
-Apache Santuario, Spring Boot, SLF4J/Logback, Apache POI, Jakarta
-XML Binding, vb.) kendi orijinal lisansları altında dağıtılmaya
-devam eder. Her bileşenin kendi LICENSE/NOTICE dosyasına ve maven
-artifact metadata'sına bakınız.
+Apache Santuario, Spring Boot, SLF4J/Logback,
+xipki ipkcs11wrapper, vb.) kendi orijinal lisansları
+altında dağıtılmaya devam eder. Her bileşenin kendi LICENSE/NOTICE
+dosyasına ve maven artifact metadata'sına bakınız.
 
 The sources under src/main/java/tr/com/cs/ and the runtime
 dependencies declared in pom.xml (BouncyCastle, iText, xades4j,
-Apache Santuario, Spring Boot, SLF4J/Logback, Apache POI, Jakarta
-XML Binding, etc.) remain under their respective original licenses.
-See each component's own LICENSE/NOTICE file and Maven artifact
-metadata.
+Apache Santuario, Spring Boot, SLF4J/Logback,
+xipki ipkcs11wrapper, etc.) remain under their
+respective original licenses. See each component's own LICENSE/NOTICE
+file and Maven artifact metadata.
+
+--------------------------------------------------------------------------------
+IAIK PKCS#11 Wrapper Atfı / IAIK PKCS#11 Wrapper Attribution
+--------------------------------------------------------------------------------
+
+Bu ürün, PKCS#11 (Cryptoki) standardına uygun akıllı kart sürücüleriyle
+konuşmak için org.xipki:ipkcs11wrapper kütüphanesini kullanır. Bu kütüphane,
+Graz Teknik Üniversitesi Uygulamalı Bilgi İşlem ve İletişim Teknolojileri
+Enstitüsü (IAIK) tarafından geliştirilen IAIK PKCS#11 Wrapper kod tabanından
+türetilmiştir.
+
+IAIK Graz lisansı (5 maddelik BSD-tipi) zorunlu atıf metnini şu şekilde
+gerektirir; bu bildirim yazılımın dağıtıldığı her formda korunur:
+
+  This product includes software developed by IAIK of Graz University
+  of Technology.
+
+This product uses the org.xipki:ipkcs11wrapper library to communicate with
+PKCS#11 (Cryptoki) compliant smart card drivers. The library is derived from
+the IAIK PKCS#11 Wrapper code base originally developed by the Institute for
+Applied Information Processing and Communication (IAIK) at Graz University
+of Technology, Austria.
+
+The IAIK Graz license (a 5-clause BSD-style license) requires the following
+mandatory attribution notice, which is reproduced verbatim and preserved in
+every form of distribution of this Software:
+
+  This product includes software developed by IAIK of Graz University
+  of Technology.
+
+xipki ipkcs11wrapper'ın türetilmiş kod tabanı Apache License 2.0 altında
+dağıtılır; ayrıntı için kütüphanenin kendi LICENSE dosyasına bakınız.
+The derivative xipki ipkcs11wrapper distribution itself is licensed under the
+Apache License 2.0; see the library's own LICENSE file for details.

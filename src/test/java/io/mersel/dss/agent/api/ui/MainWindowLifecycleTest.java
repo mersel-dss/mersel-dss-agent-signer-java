@@ -64,7 +64,7 @@ class MainWindowLifecycleTest {
   void showInHeadlessKeepsHolderConsistent() {
     // Headless ortamda window.show() içsel olarak no-op'tur ama lifecycle holder yine de window'u
     // current'a yazar — bringToFront/shutdown çağrıları sessizce akmalı.
-    MainWindowLifecycle.show("1.0.0", "http://localhost/", "http://localhost/h", () -> {});
+    MainWindowLifecycle.show("1.0.0", "http://localhost/", "http://localhost/h", () -> {}, null);
     // current null olabilir veya non-null olabilir (no-op show); her iki durumda da close/2x
     // patlamamalı.
     assertDoesNotThrow(MainWindowLifecycle::close);

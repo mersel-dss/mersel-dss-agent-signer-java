@@ -69,33 +69,29 @@ public final class SystemTrayManager {
   private final String appTitle;
   private final Runnable bringWindowToFront;
   private final Runnable shutdownWithoutPrompt;
+  private final Runnable openDiagnosticsPanel;
 
   private TrayIcon trayIcon;
   private PopupMenu popupMenu;
   private MenuItem updateMenuItem;
 
-  public SystemTrayManager(String appTitle, String openUrl, String healthUrl) {
-    this(appTitle, openUrl, healthUrl, null, null);
-  }
-
   /**
-   * MainWindow'a köprü kuran constructor. {@code bringWindowToFront} verilirse menüye en üste
-   * "Pencereyi Aç" öğesi eklenir ve tray icon'a çift tıklama URL açmak yerine pencereyi öne alır.
-   * {@code shutdownWithoutPrompt} verilirse çıkış akışı pencereye delege edilir (pencerenin kendi
-   * onay diyaloğu varsa tray onay diyaloğunu atlamamak için bu callback opsiyoneldir; null
-   * verilirse tray klasik onay+exit davranışı sürer).
+   * Tam constructor. {@code openDiagnosticsPanel} verilirse menüye "Tanılama paneli aç" öğesi
+   * eklenir; null verilirse o öğe görünmez.
    */
   public SystemTrayManager(
       String appTitle,
       String openUrl,
       String healthUrl,
       Runnable bringWindowToFront,
-      Runnable shutdownWithoutPrompt) {
+      Runnable shutdownWithoutPrompt,
+      Runnable openDiagnosticsPanel) {
     this.appTitle = appTitle == null ? "Mersel DSS Agent Signer" : appTitle;
     this.openUrl = openUrl;
     this.healthUrl = healthUrl;
     this.bringWindowToFront = bringWindowToFront;
     this.shutdownWithoutPrompt = shutdownWithoutPrompt;
+    this.openDiagnosticsPanel = openDiagnosticsPanel;
   }
 
   /**
@@ -143,6 +139,12 @@ public final class SystemTrayManager {
     MenuItem healthItem = new MenuItem("Sağlık kontrolünü aç");
     healthItem.addActionListener(e -> openInBrowser(healthUrl));
     popupMenu.add(healthItem);
+
+    if (openDiagnosticsPanel != null) {
+      MenuItem diagItem = new MenuItem("Tanılama paneli aç");
+      diagItem.addActionListener(e -> openDiagnosticsPanel.run());
+      popupMenu.add(diagItem);
+    }
 
     popupMenu.addSeparator();
 

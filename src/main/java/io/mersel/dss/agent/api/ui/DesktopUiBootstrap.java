@@ -42,6 +42,7 @@ import org.springframework.stereotype.Component;
 
 import io.mersel.dss.agent.api.SignerApplication;
 import io.mersel.dss.agent.api.config.SignerProperties;
+import io.mersel.dss.agent.api.services.diagnostics.TraceRecorder;
 import io.mersel.dss.agent.api.services.update.UpdateGate;
 import io.mersel.dss.agent.api.services.update.UpdateInfo;
 import io.mersel.dss.agent.api.services.update.UpdateService;
@@ -70,6 +71,7 @@ public class DesktopUiBootstrap {
   private final SignerProperties properties;
   private final UpdateService updateService;
   private final UpdateGate updateGate;
+  private final TraceRecorder traceRecorder;
   private final int serverPort;
   private final String serverAddress;
   private final String contextPath;
@@ -77,16 +79,19 @@ public class DesktopUiBootstrap {
   private volatile SystemTrayManager trayManager;
   private volatile ScheduledExecutorService updateScheduler;
 
+  @org.springframework.beans.factory.annotation.Autowired
   public DesktopUiBootstrap(
       SignerProperties properties,
       UpdateService updateService,
       UpdateGate updateGate,
+      TraceRecorder traceRecorder,
       @Value("${server.port:15212}") int serverPort,
       @Value("${server.address:127.0.0.1}") String serverAddress,
       @Value("${server.servlet.context-path:/}") String contextPath) {
     this.properties = properties;
     this.updateService = updateService;
     this.updateGate = updateGate;
+    this.traceRecorder = traceRecorder;
     this.serverPort = serverPort;
     this.serverAddress = serverAddress;
     this.contextPath = contextPath;
@@ -158,6 +163,12 @@ public class DesktopUiBootstrap {
           urls.openUrl,
           urls.healthUrl,
           () -> {
+            // Çıkışta panel açıksa kapatalım — daemon thread'ler arta kalmasın.
+            try {
+              DiagnosticsPanel.close();
+            } catch (RuntimeException re) {
+              LOG.debug("Tanılama paneli kapatılamadı: {}", re.getMessage());
+            }
             SystemTrayManager mgr = this.trayManager;
             if (mgr != null) {
               try {
@@ -167,12 +178,25 @@ public class DesktopUiBootstrap {
               }
             }
             System.exit(0);
-          });
+          },
+          buildDiagnosticsPanelOpener());
       return true;
     } catch (RuntimeException re) {
       LOG.warn("Ana pencere açılırken hata: {}", re.getMessage());
       return false;
     }
+  }
+
+  /**
+   * Tanılama panel açıcı callback'i kurar. {@code TraceRecorder} bean'i her zaman var (Spring
+   * context); ama UI'nin "panel butonu hiç görünmesin" davranışını test etmek için null'a düşmesi
+   * gerekiyorsa property ile devre dışı bırakılabilir (ileride). Şu an aktif.
+   */
+  private Runnable buildDiagnosticsPanelOpener() {
+    if (traceRecorder == null) {
+      return null;
+    }
+    return () -> DiagnosticsPanel.showOrFocus(traceRecorder);
   }
 
   /* ---------------- tray ---------------- */
@@ -194,6 +218,7 @@ public class DesktopUiBootstrap {
 
     Runnable bringWindowToFront = windowAvailable ? MainWindowLifecycle::bringToFront : null;
     Runnable shutdownDelegate = windowAvailable ? MainWindowLifecycle::shutdownWithoutPrompt : null;
+    Runnable openDiagnostics = buildDiagnosticsPanelOpener();
 
     try {
       SystemTrayManager mgr =
@@ -202,7 +227,8 @@ public class DesktopUiBootstrap {
               urls.openUrl,
               urls.healthUrl,
               bringWindowToFront,
-              shutdownDelegate);
+              shutdownDelegate,
+              openDiagnostics);
       if (mgr.install()) {
         this.trayManager = mgr;
       }

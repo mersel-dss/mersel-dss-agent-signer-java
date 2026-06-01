@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import io.mersel.dss.agent.api.services.keystore.BouncyCastleSetup;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11LibraryResolver;
 
 /**
@@ -215,6 +216,12 @@ public class Pkcs11ModuleProbe {
    * yoksa ProviderException atılır.
    */
   private static boolean defaultSunPkcs11Probe(Path libraryPath) {
+    // PIN'siz ks.load(null, null) public objeleri tarar; karta yazılı bir EC sertifikası veya
+    // public key SunEC'nin "Only named ECParameters supported" hatasını tetikleyebilir. BC'yi
+    // önceden kayıt etmek probe'un yanlış-negatif (bu lib yanlış vendor sandık) sonuç dönmesini
+    // engeller.
+    BouncyCastleSetup.ensureRegistered();
+
     String name =
         "merselProbe-" + SEQ.incrementAndGet() + "-" + UUID.randomUUID().toString().substring(0, 8);
     Path configFile;

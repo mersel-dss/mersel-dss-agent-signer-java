@@ -59,6 +59,40 @@ mersel:
     smartcard-config: classpath:smartcard-config.xml
 
     # ----------------------------------------------------------------------
+    # Tanılama (diagnostics) ayarları
+    # ----------------------------------------------------------------------
+    # `expose-cause-chain=false` (default) → ErrorModel JSON'unda `causeChain`
+    # alanı basılmaz; sadece `traceId` + özet mesaj döner. Cause chain içinde
+    # PIN/path/host bilgisi sızma riski olduğundan varsayılan kapalıdır.
+    # Geliştirici ortamında açmak için `MERSEL_AGENT_EXPOSE_CAUSE_CHAIN=true`
+    # ortam değişkenini set edin; trace ID + log dosyası üzerinden zincir
+    # yine destek tarafına ulaşır.
+    # ----------------------------------------------------------------------
+    diagnostics:
+      expose-cause-chain: ${MERSEL_AGENT_EXPOSE_CAUSE_CHAIN:false}
+      # ----------------------------------------------------------------------
+      # Bellekteki trace recorder — son N HTTP isteğinin yapısal tanılaması.
+      # Hem `GET /diagnostics/traces` REST ucu hem de masaüstü UI'daki
+      # "Tanılama paneli" buradan beslenir. Recorder kapatılırsa yeni kayıt
+      # eklenmez; mevcut kayıtlar silinmez. Kapasite ringi: en eski düşürülür.
+      # PIN, ham gövde ve full sertifika içeriği ASLA buraya yazılmaz; query
+      # string'de bilinen hassas anahtarlar otomatik maskelenir.
+      # ----------------------------------------------------------------------
+      trace-recorder:
+        enabled: ${MERSEL_AGENT_TRACE_RECORDER_ENABLED:true}
+        capacity: ${MERSEL_AGENT_TRACE_RECORDER_CAPACITY:200}
+        # ----------------------------------------------------------------------
+        # Yüksek frekanslı "gürültü" path'leri (health/ping/favicon vb.) buffer'ı
+        # doldurup gerçek API çağrılarını ringden düşürmesin diye varsayılan
+        # olarak kayıt DIŞINDA tutulur. Frontend ya da uptime monitor'lar bu
+        # path'lere saniyede onlarca istek atabilir — log'a düşmesi gereksizdir.
+        # Override için virgülle ayrılmış prefix listesi: /actuator,/health,...
+        # Kapatmak için: "none" ya da boş bırakın → her şey kaydedilir.
+        # Karşılaştırma case-sensitive prefix match (query string yok sayılır).
+        # ----------------------------------------------------------------------
+        skip-paths: ${MERSEL_AGENT_TRACE_RECORDER_SKIP:/actuator,/health,/ping,/favicon.ico,/error}
+
+    # ----------------------------------------------------------------------
     # Masaüstü UI (splash + ana pencere + system tray) ayarları
     # ----------------------------------------------------------------------
     # Uygulama kullanıcı makinesinde çalıştığı için varsayılan olarak masaüstü

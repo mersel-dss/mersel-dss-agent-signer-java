@@ -32,6 +32,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.mersel.dss.agent.api.exceptions.Pkcs11LibraryException;
 
 /**
@@ -54,6 +57,8 @@ import io.mersel.dss.agent.api.exceptions.Pkcs11LibraryException;
  */
 final class Pkcs11Reflection {
 
+  private static final Logger log = LoggerFactory.getLogger(Pkcs11Reflection.class);
+
   private final Class<?> pkcs11Cls;
   private final Class<?> attrCls;
 
@@ -66,6 +71,15 @@ final class Pkcs11Reflection {
   private final Method findObjectsM; // long[] C_FindObjects(long, long)
   private final Method findObjectsFinalM; // void C_FindObjectsFinal(long)
   private final Method getAttributeValueM; // void C_GetAttributeValue(long, long, CK_ATTRIBUTE[])
+
+  /** long[] C_GetMechanismList(long slotID) — bazı JDK'larda mevcut, bazılarında yok. */
+  private final Method getMechanismListM;
+
+  /** CK_MECHANISM_INFO C_GetMechanismInfo(long slotID, long type) — opsiyonel. */
+  private final Method getMechanismInfoM;
+
+  /** CK_TOKEN_INFO C_GetTokenInfo(long slotID) — opsiyonel. */
+  private final Method getTokenInfoM;
 
   private final Constructor<?> attrCtorTypeValue; // CK_ATTRIBUTE(long type, Object pValue)
   private final Field attrPValue; // public Object pValue;
@@ -93,11 +107,41 @@ final class Pkcs11Reflection {
 
       attrCtorTypeValue = attrCls.getConstructor(long.class, Object.class);
       attrPValue = attrCls.getField("pValue");
+
+      // Aşağıdakiler "best effort" — bazı JDK 1.8 patch'lerinde bu metotlar private veya
+      // farklı imzalı olabilir; lookup başarısızsa null'a düşeriz, tanılama API'si "yok" der.
+      getMechanismListM = findMethodSilent(pkcs11Cls, "C_GetMechanismList", long.class);
+      getMechanismInfoM = findMethodSilent(pkcs11Cls, "C_GetMechanismInfo", long.class, long.class);
+      getTokenInfoM = findMethodSilent(pkcs11Cls, "C_GetTokenInfo", long.class);
     } catch (ClassNotFoundException | NoSuchMethodException | NoSuchFieldException e) {
       throw new Pkcs11LibraryException(
           "sun.security.pkcs11.wrapper.PKCS11 reflection setup başarısız (JDK uyumsuzluğu): "
               + e.getMessage(),
           e);
+    }
+  }
+
+  private static Method findMethodSilent(Class<?> cls, String name, Class<?>... params) {
+    try {
+      Method m = cls.getMethod(name, params);
+      m.setAccessible(true);
+      return m;
+    } catch (NoSuchMethodException notPublic) {
+      try {
+        Method m = cls.getDeclaredMethod(name, params);
+        m.setAccessible(true);
+        return m;
+      } catch (NoSuchMethodException notDeclared) {
+        log.debug(
+            "PKCS11 wrapper'ında {}({}) metodu bulunamadı — tanılama eksik dolacak.",
+            name,
+            params.length);
+        return null;
+      }
+    } catch (RuntimeException re) {
+      // setAccessible reddi (illegal-access) olabilir; sessizce null'a düş.
+      log.debug("PKCS11 wrapper {} method erişimi reddedildi: {}", name, re.getMessage());
+      return null;
     }
   }
 
@@ -188,6 +232,157 @@ final class Pkcs11Reflection {
   void getAttributeValue(Object p11, long session, long objectHandle, Object attrArray)
       throws ReflectiveOperationException {
     getAttributeValueM.invoke(p11, session, objectHandle, attrArray);
+  }
+
+  /* ------------------- mechanism / token info (opsiyonel) ------------------ */
+
+  /** {@code true} → C_GetMechanismList reflection olarak çağrılabilir bu JDK'da. */
+  boolean supportsMechanismList() {
+    return getMechanismListM != null;
+  }
+
+  /**
+   * {@code C_GetMechanismList(slotID)} → token'ın desteklediği {@code CKM_*} numaraları. Reflection
+   * desteklenmiyorsa {@code null} döner.
+   */
+  long[] getMechanismList(Object p11, long slotID) throws ReflectiveOperationException {
+    if (getMechanismListM == null) {
+      return null;
+    }
+    Object res = getMechanismListM.invoke(p11, slotID);
+    if (res instanceof long[]) {
+      return (long[]) res;
+    }
+    return null;
+  }
+
+  /**
+   * {@code C_GetMechanismInfo(slotID, mechanism)} → {@code CK_MECHANISM_INFO}. Bilinen alanlar
+   * {@code ulMinKeySize}, {@code ulMaxKeySize}, {@code flags}.
+   */
+  MechanismInfo getMechanismInfo(Object p11, long slotID, long mechanism)
+      throws ReflectiveOperationException {
+    if (getMechanismInfoM == null) {
+      return null;
+    }
+    Object info = getMechanismInfoM.invoke(p11, slotID, mechanism);
+    if (info == null) {
+      return null;
+    }
+    long min = readLongFieldSilent(info, "ulMinKeySize");
+    long max = readLongFieldSilent(info, "ulMaxKeySize");
+    long flags = readLongFieldSilent(info, "flags");
+    return new MechanismInfo(min, max, flags);
+  }
+
+  /** {@code C_GetTokenInfo(slotID)} dönen yapıdan bilinen alanları okur. */
+  TokenInfo getTokenInfo(Object p11, long slotID) throws ReflectiveOperationException {
+    if (getTokenInfoM == null) {
+      return null;
+    }
+    Object info = getTokenInfoM.invoke(p11, slotID);
+    if (info == null) {
+      return null;
+    }
+    String label = readPaddedString(info, "label");
+    String manufacturerId = readPaddedString(info, "manufacturerID");
+    String model = readPaddedString(info, "model");
+    String serial = readPaddedString(info, "serialNumber");
+    String firmware = readVersionField(info, "firmwareVersion");
+    String hardware = readVersionField(info, "hardwareVersion");
+    return new TokenInfo(label, manufacturerId, model, serial, firmware, hardware);
+  }
+
+  private static long readLongFieldSilent(Object owner, String field) {
+    try {
+      Field f = owner.getClass().getField(field);
+      Object v = f.get(owner);
+      if (v instanceof Number) {
+        return ((Number) v).longValue();
+      }
+    } catch (ReflectiveOperationException e) {
+      // alan yok / erişilemiyor — diagnostic best-effort, sessiz geç.
+    }
+    return -1L;
+  }
+
+  private static String readPaddedString(Object owner, String field) {
+    try {
+      Field f = owner.getClass().getField(field);
+      Object v = f.get(owner);
+      if (v instanceof char[]) {
+        return new String((char[]) v).trim();
+      }
+      if (v instanceof byte[]) {
+        return new String((byte[]) v, java.nio.charset.StandardCharsets.UTF_8).trim();
+      }
+      if (v != null) {
+        return v.toString().trim();
+      }
+    } catch (ReflectiveOperationException e) {
+      /* sessiz geç */
+    }
+    return null;
+  }
+
+  private static String readVersionField(Object owner, String field) {
+    try {
+      Field f = owner.getClass().getField(field);
+      Object v = f.get(owner);
+      if (v == null) {
+        return null;
+      }
+      // CK_VERSION { byte major; byte minor; }
+      try {
+        Field major = v.getClass().getField("major");
+        Field minor = v.getClass().getField("minor");
+        int maj = ((Number) major.get(v)).intValue() & 0xFF;
+        int min = ((Number) minor.get(v)).intValue() & 0xFF;
+        return maj + "." + min;
+      } catch (ReflectiveOperationException ver) {
+        return v.toString().trim();
+      }
+    } catch (ReflectiveOperationException e) {
+      return null;
+    }
+  }
+
+  /** {@link #getMechanismInfo} dönüş tipi. */
+  static final class MechanismInfo {
+    final long minKeySize;
+    final long maxKeySize;
+    final long flags;
+
+    MechanismInfo(long minKeySize, long maxKeySize, long flags) {
+      this.minKeySize = minKeySize;
+      this.maxKeySize = maxKeySize;
+      this.flags = flags;
+    }
+  }
+
+  /** {@link #getTokenInfo} dönüş tipi. */
+  static final class TokenInfo {
+    final String label;
+    final String manufacturerId;
+    final String model;
+    final String serial;
+    final String firmwareVersion;
+    final String hardwareVersion;
+
+    TokenInfo(
+        String label,
+        String manufacturerId,
+        String model,
+        String serial,
+        String firmwareVersion,
+        String hardwareVersion) {
+      this.label = label;
+      this.manufacturerId = manufacturerId;
+      this.model = model;
+      this.serial = serial;
+      this.firmwareVersion = firmwareVersion;
+      this.hardwareVersion = hardwareVersion;
+    }
   }
 
   private static Throwable unwrap(Throwable t) {

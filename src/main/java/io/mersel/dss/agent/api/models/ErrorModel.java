@@ -31,6 +31,8 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import io.mersel.dss.agent.api.exceptions.CauseChainExtractor;
+
 /**
  * Tüm REST endpoint'lerinde standardize edilmiş hata yanıt zarfı.
  *
@@ -69,6 +71,35 @@ public class ErrorModel {
   private String pkcs11Code;
   private Boolean pinLocked;
   private String pinAttemptsRemainingHint;
+
+  // ---------------------------------------------------------------------- //
+  // Tanılama (diagnostics) alanları — her hatada doldurulabilir, frontend  //
+  // ihtiyaç yoksa görmezden gelir. Destek operasyonu için kritik.          //
+  // ---------------------------------------------------------------------- //
+
+  /**
+   * Per-request UUID. Aynı değer log satırlarında MDC üzerinden basılır; kullanıcı bu ID ile
+   * geldiğinde destek tek {@code grep} ile ilgili tüm satırları bulur.
+   */
+  private String traceId;
+
+  /**
+   * Top-level exception'dan root cause'a kadar düz cause zinciri. {@code SIGNATURE_FAILED} gibi
+   * kodun "neden başarısız" olduğunu söyleyen alan: ör. {@code [SignatureOperationException →
+   * MarshalException → InvalidAlgorithmParameterException("Unsupported parameters") →
+   * PKCS11Exception("CKR_MECHANISM_INVALID")]}.
+   *
+   * <p>{@link CauseChainExtractor.Frame} JSON'da {@code {type, message}} olarak serialize olur;
+   * mesaj null ise alan basılmaz.
+   */
+  private List<CauseChainExtractor.Frame> causeChain;
+
+  /**
+   * "Neden bu kartta çalışmıyor" sorusunun cevabını veren küçük bir bağlam. PKCS#11 imzalama
+   * hatalarında {@code SignatureProfileResolver} doldurur: token'ın aktif {@code CKM_*} mekanizma
+   * listesi, sertifikanın çağrıldığı algoritma, fallback stratejisi, vb. Diğer hatalarda null.
+   */
+  private SignatureDiagnostics signatureDiagnostics;
 
   public ErrorModel() {
     this.timestamp = OffsetDateTime.now().toString();
@@ -174,5 +205,29 @@ public class ErrorModel {
 
   public void setPinAttemptsRemainingHint(String pinAttemptsRemainingHint) {
     this.pinAttemptsRemainingHint = pinAttemptsRemainingHint;
+  }
+
+  public String getTraceId() {
+    return traceId;
+  }
+
+  public void setTraceId(String traceId) {
+    this.traceId = traceId;
+  }
+
+  public List<CauseChainExtractor.Frame> getCauseChain() {
+    return causeChain;
+  }
+
+  public void setCauseChain(List<CauseChainExtractor.Frame> causeChain) {
+    this.causeChain = causeChain;
+  }
+
+  public SignatureDiagnostics getSignatureDiagnostics() {
+    return signatureDiagnostics;
+  }
+
+  public void setSignatureDiagnostics(SignatureDiagnostics signatureDiagnostics) {
+    this.signatureDiagnostics = signatureDiagnostics;
   }
 }

@@ -56,7 +56,7 @@ class MainWindowTest {
     AtomicInteger exitCalls = new AtomicInteger();
     MainWindow window =
         new MainWindow(
-            "1.2.3", "http://localhost/", "http://localhost/h", exitCalls::incrementAndGet);
+            "1.2.3", "http://localhost/", "http://localhost/h", exitCalls::incrementAndGet, null);
 
     assertDoesNotThrow(window::show);
     assertThat(window.isShowingForTest()).isFalse();
@@ -65,13 +65,13 @@ class MainWindowTest {
 
   @Test
   void bringToFrontIsSafeWhenNotShown() {
-    MainWindow window = new MainWindow(null, null, null, null);
+    MainWindow window = new MainWindow(null, null, null, null, null);
     assertDoesNotThrow(window::bringToFront);
   }
 
   @Test
   void closeIsIdempotentEvenWhenNotShown() {
-    MainWindow window = new MainWindow("1.0.0", "u", "h", () -> {});
+    MainWindow window = new MainWindow("1.0.0", "u", "h", () -> {}, null);
     assertDoesNotThrow(window::close);
     assertDoesNotThrow(window::close);
   }
@@ -81,7 +81,7 @@ class MainWindowTest {
     // Headless'ta show() no-op olduğu için frame null kalır; shutdownWithoutPrompt EDT'ye iş
     // göndermez ama exit callback yine de tetiklenir (kullanıcı kararı: tray çıkış akışı).
     AtomicInteger exitCalls = new AtomicInteger();
-    MainWindow window = new MainWindow("1.0.0", "u", "h", exitCalls::incrementAndGet);
+    MainWindow window = new MainWindow("1.0.0", "u", "h", exitCalls::incrementAndGet, null);
 
     // EDT-safe: invokeLater kullanır, ancak headless'ta ana thread'de directly çalışmaz.
     // Bu test sadece API contract'ını korur — exception fırlatmaz.
@@ -92,7 +92,7 @@ class MainWindowTest {
   void nullVersionFallsBackToDefault() {
     // safe(null) -> "0.0.0"; UI render'lansaydı footer'da "v0.0.0" görünecekti. Sadece ctor
     // exception atmamalı.
-    assertDoesNotThrow(() -> new MainWindow(null, null, null, null));
+    assertDoesNotThrow(() -> new MainWindow(null, null, null, null, null));
   }
 
   @Test
@@ -100,7 +100,7 @@ class MainWindowTest {
     // applyUpdateState pencere kurulmadan ya da headless ortamda çağrılırsa sessizce no-op olmalı.
     // Bu, DesktopUiBootstrap listener'ının pencere açılmadan da çağrılabilmesini koruma altına
     // alır.
-    MainWindow window = new MainWindow("1.0.0", "u", "h", () -> {});
+    MainWindow window = new MainWindow("1.0.0", "u", "h", () -> {}, null);
     UpdateInfo info =
         UpdateInfo.available(
             "1.0.0", "1.0.1", "v1.0.1", "https://example/release", "https://example/jar", "", "");

@@ -60,6 +60,9 @@ public class SignerProperties {
   /** GitHub Releases tabanlı otomatik güncelleme ayarları. */
   private final Update update = new Update();
 
+  /** Tanılama (trace + error enrichment) ayarları. */
+  private final Diagnostics diagnostics = new Diagnostics();
+
   public Chain getChain() {
     return chain;
   }
@@ -70,6 +73,91 @@ public class SignerProperties {
 
   public Update getUpdate() {
     return update;
+  }
+
+  public Diagnostics getDiagnostics() {
+    return diagnostics;
+  }
+
+  /**
+   * Tanılama alt sistemi ayarları ({@code mersel.signer.diagnostics.*}).
+   *
+   * <p>Trace recorder (bellekteki ring buffer), cause chain exposure ve error enrichment
+   * davranışları bu bloktan okunur. Eskiden ilgili sınıflar {@code @Value} ile doğrudan property
+   * çekiyordu; tip güvenliği + IDE metadata için {@code @ConfigurationProperties}'a taşındı.
+   */
+  public static class Diagnostics {
+
+    /**
+     * Hata yanıtlarında cause chain ({@code ErrorModel.causeChain}) gösterilsin mi? Default {@code
+     * false}: cause chain içeride PIN/path/host bilgisi sızma riski taşıyabilir. Sadece geliştirici
+     * ortamında {@code MERSEL_AGENT_EXPOSE_CAUSE_CHAIN=true} ile açılır.
+     */
+    private boolean exposeCauseChain = false;
+
+    /** Bellekteki trace recorder ayarları. */
+    private final TraceRecorder traceRecorder = new TraceRecorder();
+
+    public boolean isExposeCauseChain() {
+      return exposeCauseChain;
+    }
+
+    public void setExposeCauseChain(boolean exposeCauseChain) {
+      this.exposeCauseChain = exposeCauseChain;
+    }
+
+    public TraceRecorder getTraceRecorder() {
+      return traceRecorder;
+    }
+
+    /**
+     * Bellekteki trace recorder — son N HTTP isteğinin yapısal tanılaması. Hem {@code GET
+     * /diagnostics/traces} REST ucu hem de masaüstü UI'daki "Tanılama paneli" buradan beslenir.
+     */
+    public static class TraceRecorder {
+
+      /** Recorder açık mı? Kapalıysa yeni kayıt eklenmez; mevcut kayıtlar silinmez. */
+      private boolean enabled = true;
+
+      /**
+       * Ring buffer kapasitesi. Default 200 — her record ~2 KB JSON eşdeğeri → 400 KB üst sınır.
+       */
+      private int capacity = 200;
+
+      /**
+       * Yüksek frekanslı "gürültü" path'leri (health/ping/favicon vb.) buffer'ı doldurup gerçek API
+       * çağrılarını ringden düşürmesin diye varsayılan olarak kayıt DIŞINDA tutulur. Override için
+       * virgülle ayrılmış prefix listesi: {@code /actuator,/health,...}. Kapatmak için: {@code
+       * none} ya da boş bırakın → her şey kaydedilir.
+       */
+      private List<String> skipPaths =
+          new ArrayList<String>(
+              java.util.Arrays.asList("/actuator", "/health", "/ping", "/favicon.ico", "/error"));
+
+      public boolean isEnabled() {
+        return enabled;
+      }
+
+      public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+      }
+
+      public int getCapacity() {
+        return capacity;
+      }
+
+      public void setCapacity(int capacity) {
+        this.capacity = capacity;
+      }
+
+      public List<String> getSkipPaths() {
+        return skipPaths;
+      }
+
+      public void setSkipPaths(List<String> skipPaths) {
+        this.skipPaths = skipPaths;
+      }
+    }
   }
 
   /**

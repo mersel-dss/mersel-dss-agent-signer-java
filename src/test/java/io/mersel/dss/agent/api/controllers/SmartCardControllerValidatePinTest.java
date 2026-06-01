@@ -64,7 +64,10 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
+            mock(SmartCardReaderService.class),
+            mock(CertificateListingService.class),
+            validator,
+            null);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -89,7 +92,10 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
+            mock(SmartCardReaderService.class),
+            mock(CertificateListingService.class),
+            validator,
+            null);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -113,7 +119,10 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
+            mock(SmartCardReaderService.class),
+            mock(CertificateListingService.class),
+            validator,
+            null);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -133,7 +142,10 @@ class SmartCardControllerValidatePinTest {
 
     SmartCardController controller =
         new SmartCardController(
-            mock(SmartCardReaderService.class), mock(CertificateListingService.class), validator);
+            mock(SmartCardReaderService.class),
+            mock(CertificateListingService.class),
+            validator,
+            null);
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");

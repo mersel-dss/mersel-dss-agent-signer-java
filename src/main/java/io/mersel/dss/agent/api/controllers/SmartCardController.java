@@ -49,6 +49,8 @@ import io.mersel.dss.agent.api.models.SmartCardDetail;
 import io.mersel.dss.agent.api.models.SmartCardResponse;
 import io.mersel.dss.agent.api.models.enums.CertificatePurpose;
 import io.mersel.dss.agent.api.services.certificate.CertificateListingService;
+import io.mersel.dss.agent.api.services.signature.MechanismCapabilityResponse;
+import io.mersel.dss.agent.api.services.signature.MechanismCapabilityService;
 import io.mersel.dss.agent.api.services.smartcard.PcscDiagnostics;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardInfo;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardPinValidator;
@@ -65,14 +67,18 @@ public class SmartCardController {
   private final SmartCardReaderService readerService;
   private final CertificateListingService certificateListingService;
   private final SmartCardPinValidator pinValidator;
+  private final MechanismCapabilityService mechanismCapabilityService;
 
+  @org.springframework.beans.factory.annotation.Autowired
   public SmartCardController(
       SmartCardReaderService readerService,
       CertificateListingService certificateListingService,
-      SmartCardPinValidator pinValidator) {
+      SmartCardPinValidator pinValidator,
+      MechanismCapabilityService mechanismCapabilityService) {
     this.readerService = readerService;
     this.certificateListingService = certificateListingService;
     this.pinValidator = pinValidator;
+    this.mechanismCapabilityService = mechanismCapabilityService;
   }
 
   @Operation(
@@ -105,6 +111,44 @@ public class SmartCardController {
   @GetMapping(value = "/smartcard/diagnostics", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<PcscDiagnostics> diagnostics() {
     return ResponseEntity.ok(readerService.diagnose());
+  }
+
+  @Operation(
+      summary =
+          "Belirtilen terminalin token'ı için PKCS#11 mekanizma listesi (CKM_*) ve XAdES uyumluluk"
+              + " özeti. PIN gerektirmez.",
+      description =
+          "Token'ın `C_GetMechanismList` çıktısını sembolik formda (`CKM_SHA256_RSA_PKCS`,"
+              + " `CKM_ECDSA_SHA384`, ...) döner. Aynı zamanda RSA ve ECDSA için ilk tercih"
+              + " edilebilir mekanizmayı, fallback gerekip gerekmediğini ve uyarıları içeren"
+              + " `xadesProfile` özetini hesaplar.\n\n"
+              + "**Ne zaman kullanılır?**\n\n"
+              + "1. Frontend kullanıcı kart taktıktan sonra imzalama akışından önce çağırarak"
+              + " 'kartınız XAdES-BES için uygun' / 'firmware'iniz RSA-PSS desteklemiyor' gibi"
+              + " ön-uyarı verebilir.\n"
+              + "2. Bir kart 'Unsupported parameters' hatasıyla başarısız olduğunda destek bu uçla"
+              + " gerçek mekanizma listesini görür ve fix önerir.\n\n"
+              + "**Güvenlik**: PIN harcamaz, kart sayacını etkilemez (PKCS#11 spec §10.4 — public"
+              + " session).")
+  @GetMapping(value = "/smartcard/mechanisms", produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<MechanismCapabilityResponse> mechanisms(
+      @Parameter(description = "PCSC terminal adı.", required = true)
+          @NotBlank
+          @RequestParam("terminalName")
+          String terminalName,
+      @Parameter(
+              description =
+                  "İsteğe bağlı PKCS#11 paylaşımlı kütüphane yolu (bare ad veya tam path).")
+          @RequestParam(value = "pkcs11LibraryPath", required = false)
+          String pkcs11LibraryPath,
+      @Parameter(
+              description =
+                  "Layer 5 fallback: ATR algılaması başarısızken kullanıcının manuel seçtiği kart"
+                      + " tipi (örn. AKIS, ALADDIN).")
+          @RequestParam(value = "cardType", required = false)
+          String cardType) {
+    return ResponseEntity.ok(
+        mechanismCapabilityService.describe(terminalName, pkcs11LibraryPath, cardType));
   }
 
   @Operation(

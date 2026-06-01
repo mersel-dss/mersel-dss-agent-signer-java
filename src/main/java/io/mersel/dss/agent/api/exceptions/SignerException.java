@@ -26,14 +26,26 @@
  */
 package io.mersel.dss.agent.api.exceptions;
 
+import io.mersel.dss.agent.api.models.SignatureDiagnostics;
+
 /**
  * Tüm domain hatalarının taban sınıfı. Alt sınıflar bir {@code errorCode} taşır; {@code
  * GlobalExceptionHandler} bu kodu {@code ErrorModel}'e yansıtır ve uygun HTTP statüsüyle döner.
+ *
+ * <p>Tanılama desteği: opsiyonel {@code traceId} (request başına UUID; MDC'ye {@link
+ * io.mersel.dss.agent.api.config.TraceIdFilter} tarafından set edilir) ve opsiyonel {@code
+ * diagnostics} (imzalama bağlamı; {@link SignatureDiagnostics}). Bu alanlar handler tarafından
+ * {@code ErrorModel}'e mirror'lanır.
  */
 public class SignerException extends RuntimeException {
   private static final long serialVersionUID = 1L;
 
   private final String errorCode;
+
+  /** Per-request UUID; {@link GlobalExceptionHandler#enrich} MDC'den alıp yazar. */
+  private String traceId;
+
+  private SignatureDiagnostics diagnostics;
 
   public SignerException(String message) {
     this("SIGNER_ERROR", message, null);
@@ -54,5 +66,33 @@ public class SignerException extends RuntimeException {
 
   public String getErrorCode() {
     return errorCode;
+  }
+
+  public String getTraceId() {
+    return traceId;
+  }
+
+  /**
+   * Fluent setter — {@link GlobalExceptionHandler#enrich} MDC'de traceId yoksa exception üzerine
+   * yazılmış olanı kullanır. Normal akışta çağrılmaz; test izole senaryolarında ve MDC outside
+   * bridge context'lerde gerekir.
+   */
+  public SignerException withTraceId(String traceId) {
+    this.traceId = traceId;
+    return this;
+  }
+
+  /** Package-private setter — sadece {@link GlobalExceptionHandler} MDC'den alıp set eder. */
+  public void setTraceId(String traceId) {
+    this.traceId = traceId;
+  }
+
+  public SignatureDiagnostics getDiagnostics() {
+    return diagnostics;
+  }
+
+  public SignerException withDiagnostics(SignatureDiagnostics diagnostics) {
+    this.diagnostics = diagnostics;
+    return this;
   }
 }

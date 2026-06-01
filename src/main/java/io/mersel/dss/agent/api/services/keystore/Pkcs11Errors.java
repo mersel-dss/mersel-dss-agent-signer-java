@@ -30,6 +30,9 @@ import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import io.mersel.dss.agent.api.exceptions.Pkcs11AuthException;
+import io.mersel.dss.agent.api.exceptions.Pkcs11LibraryException;
+
 /**
  * SunPKCS11'in fırlattığı sarmalanmış {@link java.io.IOException}'lar içinden orijinal {@code
  * sun.security.pkcs11.wrapper.PKCS11Exception}'ı bulup PKCS#11 v2.40 §A "Return Values"
@@ -63,6 +66,56 @@ public final class Pkcs11Errors {
 
   private Pkcs11Errors() {
     /* utility */
+  }
+
+  /**
+   * SunPKCS11'in {@code KeyStore.load} sırasında fırlattığı hatayı, cause zincirini gezerek alttaki
+   * {@code PKCS11Exception}'ın {@code CKR_xxx} koduna göre yapısal exception'a çevirir.
+   *
+   * <p>Eski string-tabanlı heuristic ({@code msg.contains("pin")}) en üstteki {@code "load failed"}
+   * mesajına bakıyordu ve gerçek PIN hatasını ıskalıyordu — sonuç olarak yanlış PIN yanıtı {@code
+   * 503 PKCS11_UNAVAILABLE} dönüyordu. Yeni davranış: PKCS#11 v2.40 §A "Return Values" tablosundaki
+   * sembolik koda göre uygun exception + frontend dostu detaylar.
+   *
+   * <p>{@link Pkcs11Session#open} ve {@link
+   * io.mersel.dss.agent.api.services.signature.XadesService} (explicit {@code AuthProvider.login}
+   * yolu) bu metodu çağırır; PIN/Library hatası sınıflandırması tek noktadan yapılır.
+   */
+  public static RuntimeException mapKeyStoreLoadFailure(Throwable loadFail) {
+    Outcome outcome = classify(loadFail);
+    String topMsg =
+        loadFail.getMessage() == null ? loadFail.getClass().getSimpleName() : loadFail.getMessage();
+    switch (outcome.getKind()) {
+      case PIN_INCORRECT:
+      case PIN_LOCKED:
+      case PIN_EXPIRED:
+      case PIN_INVALID_FORMAT:
+        return new Pkcs11AuthException(
+            outcome.getErrorCode(),
+            outcome.getMessage(),
+            loadFail,
+            outcome.getPkcs11Code(),
+            outcome.isLocked(),
+            outcome.getAttemptsRemainingHint());
+      case DEVICE_REMOVED:
+        // Akıllı kart fiziksel olarak çıkarıldı / sürücü hatası — auth değil, donanım sorunu.
+        // SmartCardException kullanmak daha doğru olabilirdi ama burada sebep zinciri PIN-flow
+        // ortasından geliyor; library exception 503 davranışı yeterince anlamlı.
+        return new Pkcs11LibraryException(
+            "PKCS#11 cihaz hatası (" + outcome.getPkcs11Code() + "): " + outcome.getMessage(),
+            loadFail);
+      case SESSION_BUSY:
+        return new Pkcs11LibraryException(
+            "PKCS#11 oturumu meşgul (" + outcome.getPkcs11Code() + "): " + outcome.getMessage(),
+            loadFail);
+      case UNKNOWN:
+      default:
+        // Ne PIN koduna ne donanım koduna eşleşmedi — istisnai ama mümkün (eski sürücü, custom
+        // CKR_VENDOR_xxx). Eski davranışa düş: PKCS11_UNAVAILABLE ama mesajı CKR ile zenginleştir.
+        String suffix = outcome.getPkcs11Code() == null ? "" : " (" + outcome.getPkcs11Code() + ")";
+        return new Pkcs11LibraryException(
+            "PKCS#11 keystore yüklenemedi: " + topMsg + suffix, loadFail);
+    }
   }
 
   /**

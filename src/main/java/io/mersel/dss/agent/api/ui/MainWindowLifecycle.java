@@ -46,15 +46,21 @@ public final class MainWindowLifecycle {
 
   /**
    * Ana pencereyi gösterir. Zaten gösteriliyorsa öne alır (idempotent). {@code onExitRequest}
-   * pencerenin "Uygulamayı Kapat" butonu ya da X tuşu ile çağrıldığında tetiklenir.
+   * pencerenin "Uygulamayı Kapat" butonu ya da X tuşu ile çağrıldığında tetiklenir. {@code
+   * openDiagnosticsPanel} null ise "Tanılama paneli" butonu pencerede görünmez.
    */
   public static synchronized void show(
-      String version, String openUrl, String healthUrl, Runnable onExitRequest) {
+      String version,
+      String openUrl,
+      String healthUrl,
+      Runnable onExitRequest,
+      Runnable openDiagnosticsPanel) {
     if (current != null) {
       current.bringToFront();
       return;
     }
-    MainWindow window = new MainWindow(version, openUrl, healthUrl, onExitRequest);
+    MainWindow window =
+        new MainWindow(version, openUrl, healthUrl, onExitRequest, openDiagnosticsPanel);
     window.show();
     current = window;
     // Pencere kalkmadan önce gelen update sinyali varsa burada apply et — DesktopUiBootstrap

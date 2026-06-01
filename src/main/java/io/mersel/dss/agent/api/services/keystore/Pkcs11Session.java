@@ -28,7 +28,6 @@ package io.mersel.dss.agent.api.services.keystore;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -43,12 +42,15 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.security.auth.callback.Callback;
+import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.PasswordCallback;
 import javax.security.auth.login.LoginException;
 
@@ -134,6 +136,13 @@ public final class Pkcs11Session implements AutoCloseable {
     if (libraryPath == null) {
       throw new IllegalArgumentException("libraryPath null olamaz.");
     }
+    // SunPKCS11, P11KeyStore.engineLoad() sırasında karttaki tüm objeleri enumerate eder; karta
+    // yazılı bir EC private/public key varsa AlgorithmParameters.getInstance("EC") SunEC'ye düşer
+    // ve explicit form CKA_EC_PARAMS için "Only named ECParameters supported" IOException atar.
+    // BC'yi pozisyon 1'e kayıt edip SunEC'yi kaldırarak EC parse'ı BC'ye yönlendiriyoruz; gerçek
+    // imzalama RSA bile olsa load aşamasının patlamasını engeller.
+    BouncyCastleSetup.ensureRegistered();
+
     String name =
         "merselSigner-"
             + SEQ.incrementAndGet()
@@ -158,55 +167,75 @@ public final class Pkcs11Session implements AutoCloseable {
     } catch (Exception loadFail) {
       Security.removeProvider(provider.getName());
       silentDelete(configFile);
-      throw mapKeyStoreLoadFailure(loadFail);
+      throw Pkcs11Errors.mapKeyStoreLoadFailure(loadFail);
+    }
+
+    // SunPKCS11 explicit AuthProvider.login (KeyStore.load implicit login'inin yetmediği
+    // sürücülerde Signature.initSign aşamasında CKR_USER_NOT_LOGGED_IN'i önler):
+    //
+    // KeyStore.load(null, pin) çağrısı SunPKCS11'in açtığı P11Session'da C_Login yapar; ancak
+    // P11SessionManager sonradan açacağı yeni session'lara (örn. Signature.initSign için açılan)
+    // bu login state'i otomatik devretmiyor olabilir. AKIS, SafeSign ve bazı Kamu SM kartlarında
+    // bu davranış gözlenmiştir. AuthProvider.login() çağrısı SunPKCS11'in app-wide login
+    // state'ini Provider objesinin yaşam süresine bağlar; bu sayede sonradan açılan tüm
+    // session'lar authenticated kabul edilir.
+    //
+    // Idempotent: zaten login ise SunPKCS11 sessizce no-op yapar. close() içindeki
+    // AuthProvider.logout çağrısı login state'i temiz keser.
+    if (provider instanceof AuthProvider) {
+      try {
+        loginExplicit((AuthProvider) provider, pinChars);
+        log.debug(
+            "SunPKCS11 AuthProvider.login() explicit çağrıldı (provider={}); app-level login"
+                + " state Signature.initSign() öncesi kuruldu.",
+            provider.getName());
+      } catch (LoginException loginFail) {
+        Security.removeProvider(provider.getName());
+        silentDelete(configFile);
+        throw Pkcs11Errors.mapKeyStoreLoadFailure(loginFail);
+      } catch (RuntimeException re) {
+        // SunPKCS11 bazen LoginException yerine ProviderException sarmalı fırlatabilir
+        // (CKR_FUNCTION_FAILED, CKR_GENERAL_ERROR, vb.). Provider + config dosyasını
+        // temizlemeden bırakmak resource leak; bu yüzden geniş catch.
+        Security.removeProvider(provider.getName());
+        silentDelete(configFile);
+        throw Pkcs11Errors.mapKeyStoreLoadFailure(re);
+      }
     }
     return new Pkcs11Session(provider, ks, configFile, name, pinChars, true);
   }
 
   /**
-   * SunPKCS11'in {@code KeyStore.load} sırasında fırlattığı hatayı, cause zincirini gezerek alttaki
-   * {@code PKCS11Exception}'ın {@code CKR_xxx} koduna göre yapısal exception'a çevirir.
+   * SunPKCS11 {@code AuthProvider}'ına app-wide explicit login yapar. {@code KeyStore.load(null,
+   * pin)} implicit login'inin yetmediği sürücülerde (AKIS / SafeSign / bazı Kamu SM kartları)
+   * sonradan açılan session'lar da authenticated kabul edilsin diye kullanılır.
    *
-   * <p>Eski string-tabanlı heuristic ({@code msg.contains("pin")}) en üstteki {@code "load failed"}
-   * mesajına bakıyordu ve gerçek PIN hatasını ıskalıyordu — sonuç olarak yanlış PIN yanıtı {@code
-   * 503 PKCS11_UNAVAILABLE} dönüyordu. Yeni davranış: PKCS#11 v2.40 §A "Return Values" tablosundaki
-   * sembolik koda göre uygun exception + frontend dostu detaylar.
+   * <p>PIN char array'i metot içinde wipe edilmez; çağıran kendi kopyasını yönetmeli. Callback
+   * internal olarak PIN'in bir kopyasını alır ve SunPKCS11 kendi yaşam döngüsünde tutar.
+   *
+   * <p>{@link io.mersel.dss.agent.api.services.signature.XadesService} de aynı login akışını
+   * kullanır; duplikasyonu önlemek için her iki çağıran yeri bu metoda yönlendiriyoruz.
+   *
+   * @throws LoginException SunPKCS11 login'i başarısız olursa (yanlış PIN, kart kilitli, vb.).
+   *     Çağıran {@link Pkcs11Errors#mapKeyStoreLoadFailure} ile yapısal exception'a çevirmelidir.
    */
-  static RuntimeException mapKeyStoreLoadFailure(Throwable loadFail) {
-    Pkcs11Errors.Outcome outcome = Pkcs11Errors.classify(loadFail);
-    String topMsg =
-        loadFail.getMessage() == null ? loadFail.getClass().getSimpleName() : loadFail.getMessage();
-    switch (outcome.getKind()) {
-      case PIN_INCORRECT:
-      case PIN_LOCKED:
-      case PIN_EXPIRED:
-      case PIN_INVALID_FORMAT:
-        return new Pkcs11AuthException(
-            outcome.getErrorCode(),
-            outcome.getMessage(),
-            loadFail,
-            outcome.getPkcs11Code(),
-            outcome.isLocked(),
-            outcome.getAttemptsRemainingHint());
-      case DEVICE_REMOVED:
-        // Akıllı kart fiziksel olarak çıkarıldı / sürücü hatası — auth değil, donanım sorunu.
-        // SmartCardException kullanmak daha doğru olabilirdi ama burada sebep zinciri PIN-flow
-        // ortasından geliyor; library exception 503 davranışı yeterince anlamlı.
-        return new Pkcs11LibraryException(
-            "PKCS#11 cihaz hatası (" + outcome.getPkcs11Code() + "): " + outcome.getMessage(),
-            loadFail);
-      case SESSION_BUSY:
-        return new Pkcs11LibraryException(
-            "PKCS#11 oturumu meşgul (" + outcome.getPkcs11Code() + "): " + outcome.getMessage(),
-            loadFail);
-      case UNKNOWN:
-      default:
-        // Ne PIN koduna ne donanım koduna eşleşmedi — istisnai ama mümkün (eski sürücü, custom
-        // CKR_VENDOR_xxx). Eski davranışa düş: PKCS11_UNAVAILABLE ama mesajı CKR ile zenginleştir.
-        String suffix = outcome.getPkcs11Code() == null ? "" : " (" + outcome.getPkcs11Code() + ")";
-        return new Pkcs11LibraryException(
-            "PKCS#11 keystore yüklenemedi: " + topMsg + suffix, loadFail);
+  public static void loginExplicit(AuthProvider provider, char[] pin) throws LoginException {
+    if (provider == null) {
+      throw new IllegalArgumentException("provider null olamaz.");
     }
+    final char[] pinForLogin = pin == null ? new char[0] : pin;
+    provider.login(
+        null,
+        new CallbackHandler() {
+          @Override
+          public void handle(Callback[] callbacks) {
+            for (Callback cb : callbacks) {
+              if (cb instanceof PasswordCallback) {
+                ((PasswordCallback) cb).setPassword(pinForLogin);
+              }
+            }
+          }
+        });
   }
 
   /**
@@ -270,10 +299,6 @@ public final class Pkcs11Session implements AutoCloseable {
 
   public KeyStore getKeyStore() {
     return keyStore;
-  }
-
-  public char[] getPin() {
-    return pin;
   }
 
   /* ------------------------------------------------------------------ */
@@ -430,29 +455,9 @@ public final class Pkcs11Session implements AutoCloseable {
     } catch (Exception e) {
       log.debug("Security.removeProvider hata", e);
     }
-    invokeOptionalLogout(provider);
     silentDelete(configFile);
     if (pin != null) {
-      for (int i = 0; i < pin.length; i++) pin[i] = '\0';
+      Arrays.fill(pin, '\0');
     }
-  }
-
-  @SuppressWarnings("unused")
-  private static void invokeOptionalLogout(Provider provider) {
-    try {
-      Method m = provider.getClass().getDeclaredMethod("logout");
-      m.setAccessible(true);
-      m.invoke(provider);
-    } catch (NoSuchMethodException ignore) {
-      /* SunPKCS11'in eski sürümlerinde yok */
-    } catch (Exception e) {
-      /* logout hatası yutulur */
-    }
-  }
-
-  public PasswordCallback newPasswordCallback() {
-    PasswordCallback cb = new PasswordCallback("PIN", false);
-    cb.setPassword(pin);
-    return cb;
   }
 }

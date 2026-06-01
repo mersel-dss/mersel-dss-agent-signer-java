@@ -44,7 +44,7 @@ import io.mersel.dss.agent.api.models.ErrorModel;
  */
 class GlobalExceptionHandlerPkcs11AuthTest {
 
-  private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+  private final GlobalExceptionHandler handler = new GlobalExceptionHandler(true);
 
   @Test
   void legacyAuthException_yieldsUnauthorized_withDefaultCodeNoStructuredFields() {

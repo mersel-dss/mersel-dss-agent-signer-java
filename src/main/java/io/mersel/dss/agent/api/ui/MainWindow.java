@@ -142,6 +142,7 @@ public final class MainWindow {
   private final String openUrl;
   private final String healthUrl;
   private final Runnable onExitRequest;
+  private final Runnable openDiagnosticsPanel;
 
   private JFrame frame;
   // Center panel'in container'ı + içeriği — applyUpdateState çağrıldığında center temizlenip
@@ -151,12 +152,23 @@ public final class MainWindow {
   // Pencere ilk kurulduğunda gate'den okunmuyor — DesktopUiBootstrap listener üzerinden push eder.
   private UpdateInfo pendingUpdate;
 
-  public MainWindow(String version, String openUrl, String healthUrl, Runnable onExitRequest) {
+  /**
+   * Tanılama panel callback'i ile genişletilmiş kurucu. {@code openDiagnosticsPanel} null ise
+   * "Tanılama paneli" butonu render edilmez (graceful degradation; recorder devre dışı
+   * yapılandırmalar için).
+   */
+  public MainWindow(
+      String version,
+      String openUrl,
+      String healthUrl,
+      Runnable onExitRequest,
+      Runnable openDiagnosticsPanel) {
     this.version = safe(version);
     this.openUrl = openUrl == null ? "" : openUrl;
     this.healthUrl = healthUrl == null ? "" : healthUrl;
     // Default: System.exit(0). Bootstrap, tray cleanup'ı kendi handler'ında yapar.
     this.onExitRequest = onExitRequest != null ? onExitRequest : () -> System.exit(0);
+    this.openDiagnosticsPanel = openDiagnosticsPanel;
   }
 
   /** Pencereyi EDT üzerinde gösterir; çağıran thread bloklanmaz. */
@@ -537,6 +549,17 @@ public final class MainWindow {
     JButton healthButton = linkButton("Sağlık kontrolü");
     healthButton.addActionListener(e -> openInBrowser(healthUrl));
     row.add(healthButton);
+
+    // Tanılama paneli — DesktopUiBootstrap callback iliştirdiyse render edilir. Recorder kapalıyken
+    // bile butonu render ederiz; çünkü panel açılınca kullanıcı toggle ile recorder'ı açabilir.
+    if (openDiagnosticsPanel != null) {
+      JButton diagButton = linkButton("Tanılama paneli");
+      diagButton.setToolTipText(
+          "Son HTTP isteklerini canlı görüntüle (status / hata / cause chain / signatureDiagnostics)."
+              + " Health/ping gibi gürültü trafiği kayıt dışı tutulur.");
+      diagButton.addActionListener(e -> openDiagnosticsPanel.run());
+      row.add(diagButton);
+    }
 
     container.add(row);
     return container;
