@@ -135,10 +135,14 @@ mersel:
       http-timeout-ms: ${MERSEL_AGENT_AIA_TIMEOUT_MS:3000}
       max-depth: ${MERSEL_AGENT_AIA_MAX_DEPTH:8}
 
-    # Yerel uygulama olarak loopback dışında origin'lere genelde kapanır.
-    # Tarayıcı uzantınızın origin'ini ENV var ile aktarın:
+    # Masaüstü daemon farklı domain'lerdeki müşteri uygulamalarından (ön
+    # muhasebe, e-fatura, bordro panelleri) çağrılır — varsayılan tüm origin'lere
+    # açıktır. Sıkılaştırmak isteyen kurumsal kurulumlar pattern listesi verir,
+    # yalnız o pattern'lar kabul edilir:
     #   export MERSEL_AGENT_CORS_ORIGINS="https://app.example.com,chrome-extension://abcdef..."
-    cors-allowed-origins: ${MERSEL_AGENT_CORS_ORIGINS:http://localhost:*,https://localhost:*,http://127.0.0.1:*,https://127.0.0.1:*}
+    # Ek güvenlik vektörleri (DNS rebinding, PII leak `GET /smartcard/certificate`)
+    # için CHANGELOG > Fixed > "CORS — Varsayılan politika" bölümüne bakın.
+    cors-allowed-origins: "${MERSEL_AGENT_CORS_ORIGINS:*}"
     extra-lib-search-paths: []
     # ----------------------------------------------------------------------
     # PKCS#11 paylaşımlı kütüphane arama yolları (per-OS)

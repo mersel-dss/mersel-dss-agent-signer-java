@@ -18,10 +18,14 @@ standardına dayanır; sürüm numaralandırması
   işleyicisi `403 "Invalid CORS request"` döndürüyordu — yanıtın gövdesi de
   boş olduğundan kullanıcılar 403'ü CORS ile ilişkilendirmekte zorlanıyordu.
   Çözüm: yeni varsayılan `allowedOriginPatterns = "*"` (tüm origin'ler) +
-  `allowCredentials = true`. Spring 5.3+ pattern bazlı wildcard'la credential
-  kombinasyonunu destekler — gelen `Origin` header'ı response'a birebir
-  yansıtılır (literal `*` değil), bu sayede browser cookie / `Authorization`
-  gönderen ileri akışlar da bozulmaz. Davranış sektörün masaüstü imzalayıcı
+  `allowCredentials = true`. Hem `WebConfig.DEFAULT_OPEN_PATTERNS` hem
+  `application.yml` içindeki `cors-allowed-origins: ${MERSEL_AGENT_CORS_ORIGINS:*}`
+  default'u eş zamanlı güncellendi — yaml ENV var verilmediği zaman boş değil
+  `*` enjekte ettiği için Java katmanındaki "blank → açık" fallback'i
+  ıskalıyordu; bu nedenle ilk patch yetmemişti, yaml default'u da düzeltildi.
+  Spring 5.3+ pattern bazlı wildcard'la credential kombinasyonunu destekler —
+  gelen `Origin` header'ı response'a birebir yansıtılır (literal `*` değil),
+  bu sayede browser cookie / `Authorization` gönderen ileri akışlar da bozulmaz. Davranış sektörün masaüstü imzalayıcı
   standardıyla uyumlu (ön muhasebe / e-fatura / bordro entegrasyonları farklı
   domain'lerden bağlanır). Kurumsal sıkılaştırma yolu aynen korundu:
   `mersel.signer.cors-allowed-origins` property'sine virgülle ayrılmış
