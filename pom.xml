@@ -84,11 +84,11 @@
     <okhttp.version>4.12.0</okhttp.version>
 
     <!-- Build plugin versions -->
-    <spotless.version>2.27.2</spotless.version>
-    <jacoco.version>0.8.11</jacoco.version>
-    <license-plugin.version>4.3</license-plugin.version>
-    <enforcer.version>3.4.1</enforcer.version>
-    <dependency-check.version>9.0.9</dependency-check.version>
+    <spotless.version>2.46.1</spotless.version>
+    <jacoco.version>0.8.14</jacoco.version>
+    <license-plugin.version>4.6</license-plugin.version>
+    <enforcer.version>3.6.3</enforcer.version>
+    <dependency-check.version>9.2.0</dependency-check.version>
     <cyclonedx.version>2.9.1</cyclonedx.version>
 
     <!--
