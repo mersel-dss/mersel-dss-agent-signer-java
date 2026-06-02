@@ -198,4 +198,114 @@ class XadesServiceDispatchTest {
             Mockito.anyString(),
             Mockito.any(SignatureDiagnostics.class));
   }
+
+  @Test
+  void counterSignatureFallsBackToNativeOnCkaIdCollision() throws Exception {
+    Path libPath = Paths.get("/tmp/dummy-libakisp11.dylib");
+    XadesService svc = newSpyService(libPath);
+
+    // SunPKCS11 counter-sig yolu CKA_ID collision ile patlar (dual-key SIGN0+SIGN1).
+    SignatureOperationException sunFail =
+        new SignatureOperationException(
+            SignatureOperationException.CODE_FAILED,
+            "XAdES CounterSignature başarısız: invalid KeyStore state: found 2 private keys"
+                + " sharing CKA_ID 0xdeadbeef",
+            new java.security.KeyStoreException("found 2 private keys sharing CKA_ID 0xdeadbeef"));
+    Mockito.doThrow(sunFail)
+        .when(svc)
+        .signHrCounterSignatureViaSunPkcs11(
+            Mockito.eq(libPath),
+            Mockito.any(SignDocumentDto.class),
+            Mockito.any(SignatureDiagnostics.class));
+
+    byte[] nativeOutput = "<doc><Signature/></doc>".getBytes(StandardCharsets.UTF_8);
+    Mockito.doReturn(nativeOutput)
+        .when(svc)
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.eq(libPath),
+            Mockito.eq("a2c3dfb6572a06"),
+            Mockito.eq("1234"),
+            Mockito.any(SignatureDiagnostics.class));
+
+    byte[] result = svc.signHrXmlCounterSignature(dto());
+    assertThat(result).isEqualTo(nativeOutput);
+
+    Mockito.verify(svc, Mockito.times(1))
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.eq(libPath),
+            Mockito.anyString(),
+            Mockito.anyString(),
+            Mockito.any(SignatureDiagnostics.class));
+  }
+
+  @Test
+  void counterSignatureFallsBackToNativeOnFunctionNotSupported() throws Exception {
+    Path libPath = Paths.get("/tmp/dummy-libakisp11.dylib");
+    XadesService svc = newSpyService(libPath);
+
+    // Raw-only firmware: SunPKCS11 multi-part C_SignUpdate → CKR_FUNCTION_NOT_SUPPORTED.
+    SignatureOperationException sunFail =
+        new SignatureOperationException(
+            SignatureOperationException.CODE_ALGORITHM_UNSUPPORTED,
+            "XAdES CounterSignature başarısız: update() failed | root: CKR_FUNCTION_NOT_SUPPORTED",
+            new RuntimeException("CKR_FUNCTION_NOT_SUPPORTED"));
+    Mockito.doThrow(sunFail)
+        .when(svc)
+        .signHrCounterSignatureViaSunPkcs11(
+            Mockito.eq(libPath),
+            Mockito.any(SignDocumentDto.class),
+            Mockito.any(SignatureDiagnostics.class));
+
+    byte[] nativeOutput = "<doc><Signature/></doc>".getBytes(StandardCharsets.UTF_8);
+    Mockito.doReturn(nativeOutput)
+        .when(svc)
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.eq(libPath),
+            Mockito.anyString(),
+            Mockito.anyString(),
+            Mockito.any(SignatureDiagnostics.class));
+
+    assertThat(svc.signHrXmlCounterSignature(dto())).isEqualTo(nativeOutput);
+
+    Mockito.verify(svc, Mockito.times(1))
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.eq(libPath),
+            Mockito.anyString(),
+            Mockito.anyString(),
+            Mockito.any(SignatureDiagnostics.class));
+  }
+
+  @Test
+  void counterSignatureUnrelatedFailureDoesNotFallback() throws Exception {
+    Path libPath = Paths.get("/tmp/dummy-libakisp11.dylib");
+    XadesService svc = newSpyService(libPath);
+
+    // PIN hatası — native'e DÜŞMEMELİ, kullanıcıya olduğu gibi raporlanmalı.
+    SignatureOperationException sunFail =
+        new SignatureOperationException(
+            SignatureOperationException.CODE_FAILED,
+            "XAdES CounterSignature başarısız: CKR_PIN_INCORRECT (0x000000A0)",
+            new RuntimeException("CKR_PIN_INCORRECT"));
+    Mockito.doThrow(sunFail)
+        .when(svc)
+        .signHrCounterSignatureViaSunPkcs11(
+            Mockito.eq(libPath),
+            Mockito.any(SignDocumentDto.class),
+            Mockito.any(SignatureDiagnostics.class));
+
+    assertThatThrownBy(() -> svc.signHrXmlCounterSignature(dto()))
+        .isInstanceOf(SignatureOperationException.class);
+
+    Mockito.verify(svc, Mockito.never())
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.any(Path.class),
+            Mockito.anyString(),
+            Mockito.anyString(),
+            Mockito.any(SignatureDiagnostics.class));
+  }
 }

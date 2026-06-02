@@ -155,6 +155,29 @@ class XadesServiceNativeFallbackTest {
   }
 
   @Test
+  void requiresNativeRawSignTrueForRawRsaSoftDigest() {
+    // Token yalnız raw CKM_RSA_PKCS desteklerse resolver bu fallbackStrategy'i seçer; xades4j
+    // yolu SunPKCS11 multi-part C_SignUpdate'e düşüp CKR_FUNCTION_NOT_SUPPORTED ile patlayacağı
+    // için proactive olarak IAIK native yoluna yönlendirilmeli.
+    assertThat(XadesService.requiresNativeRawSign("raw-rsa-soft-digest")).isTrue();
+  }
+
+  @Test
+  void requiresNativeRawSignTrueForRawEcdsaSoftDigest() {
+    assertThat(XadesService.requiresNativeRawSign("raw-ecdsa-soft-digest")).isTrue();
+  }
+
+  @Test
+  void requiresNativeRawSignFalseForCombinedAndNullStrategies() {
+    // Combined mekanizmalar (kart digest'i kendi hesaplar) SunPKCS11 yolunda sorunsuz çalışır.
+    assertThat(XadesService.requiresNativeRawSign(null)).isFalse();
+    assertThat(XadesService.requiresNativeRawSign("rsa-sha1-only")).isFalse();
+    assertThat(XadesService.requiresNativeRawSign("ecdsa-sha1-only")).isFalse();
+    assertThat(XadesService.requiresNativeRawSign("iaik-pkcs11-sunpkcs11-bypass")).isFalse();
+    assertThat(XadesService.requiresNativeRawSign("none-available")).isFalse();
+  }
+
+  @Test
   void estimateKeySizeBitsRsa2048() {
     X509Certificate cert = Mockito.mock(X509Certificate.class);
     RSAPublicKey rsa = Mockito.mock(RSAPublicKey.class);

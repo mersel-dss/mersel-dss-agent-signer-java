@@ -239,6 +239,13 @@ public class XadesService {
       String pin,
       SignatureDiagnostics diag,
       Throwable xades4jFailure) {
+    // Spesifik SunPKCS11 patolojisini (CKA_ID collision / CKR_USER_NOT_LOGGED_IN) diag'a yansıt;
+    // native yolun nötr uyarısı yalnız "IAIK üzerinden imzalandı" der, neden bağlamı buradan gelir.
+    mergeWarning(
+        diag,
+        "SunPKCS11 P11KeyStore patolojisi tespit edildi ("
+            + describePathology(xades4jFailure)
+            + "); IAIK PKCS#11 wrapper fallback'ine düşüldü.");
     try {
       return doXadesBesSignNative(xmlBytes, libraryPath, certIdentifier, pin, diag);
     } catch (SignerException nativeKnown) {
@@ -276,44 +283,55 @@ public class XadesService {
         dto.getCertificateId());
 
     SignatureDiagnostics diag = baseDiagnosticsFor(dto, libraryPath);
-    Pkcs11Session session = null;
+    byte[] xmlBytes = readBytes(dto);
     try {
-      session = Pkcs11Session.open(libraryPath, dto.getPin());
-    } catch (RuntimeException sessionOpenFail) {
-      // Pkcs11Session.open SunPKCS11 P11KeyStore.engineLoad çağırır; SunPKCS11'in bilinen
-      // patolojileri (CKA_ID collision veya CKR_USER_NOT_LOGGED_IN session-scoped login) burada
-      // tetiklenir. Counter-signature için native imza akışı (mevcut <ds:Signature>
-      // SignatureValue'suna injection) ayrı bir refactor gerektiriyor; şimdilik kullanıcıya açık
-      // hata mesajı + remediation veriyoruz.
-      if (IaikPkcs11Signer.requiresIaikFallback(sessionOpenFail)) {
-        log.warn(
-            "Counter-signature: SunPKCS11 patolojisi yüzünden Pkcs11Session açılamadı"
-                + " (terminal={}, certId={}, root={}).",
-            dto.getTerminalName(),
-            dto.getCertificateId(),
-            CauseChainExtractor.rootMessage(sessionOpenFail));
-        mergeWarning(
-            diag,
-            "SunPKCS11 P11KeyStore patolojisi tespit edildi (CKA_ID collision veya"
-                + " CKR_USER_NOT_LOGGED_IN). XAdES counter signature için IAIK PKCS#11 wrapper"
-                + " fallback henüz aktif değil; aynı belge için XAdES-BES enveloped imzayı"
-                + " (/xades/sign) kullanmak fallback üzerinden çalışacaktır.");
-        throw (SignatureOperationException)
-            new SignatureOperationException(
-                    SignatureOperationException.CODE_FAILED,
-                    "XAdES CounterSignature başarısız: SunPKCS11 patolojisi (CKA_ID collision"
-                        + " veya CKR_USER_NOT_LOGGED_IN) counter-signature akışında IAIK fallback"
-                        + " ile henüz desteklenmiyor. /xades/sign endpoint'i bu kart için IAIK"
-                        + " path üzerinden çalışır.",
-                    sessionOpenFail)
-                .withDiagnostics(diag);
+      return signHrCounterSignatureViaSunPkcs11(libraryPath, dto, diag);
+    } catch (SignerException known) {
+      // SunPKCS11 yolu (P11KeyStore engineLoad ya da JSR-105 sign) bilinen bir patolojiyle
+      // patladıysa counter-signature'ı IAIK PKCS#11 wrapper üzerinden (SunPKCS11 bypass) yeniden
+      // dener: CKA_ID collision / CKR_USER_NOT_LOGGED_IN (requiresIaikFallback) ya da raw-only
+      // firmware'in CKR_FUNCTION_NOT_SUPPORTED / "Unsupported parameters" patolojisi
+      // (classifySignatureFailure == ALGORITHM_UNSUPPORTED). Aksi halde tanılamayı bağlayıp
+      // olduğu gibi yeniden fırlat.
+      if (requiresCounterSignatureNativeFallback(known)) {
+        logFallbackReason(known, dto);
+        return doCounterSignatureNativeWithDiag(
+            xmlBytes, libraryPath, dto.getCertificateId(), dto.getPin(), diag, known);
       }
-      throw sessionOpenFail;
+      if (known.getDiagnostics() == null) {
+        known.withDiagnostics(diag);
+      }
+      throw known;
+    } catch (RuntimeException e) {
+      if (requiresCounterSignatureNativeFallback(e)) {
+        logFallbackReason(e, dto);
+        return doCounterSignatureNativeWithDiag(
+            xmlBytes, libraryPath, dto.getCertificateId(), dto.getPin(), diag, e);
+      }
+      String code = classifySignatureFailure(e);
+      String rootMsg = CauseChainExtractor.rootMessage(e);
+      String msg =
+          "XAdES CounterSignature başarısız: "
+              + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+              + (rootMsg != null && !rootMsg.equals(e.getMessage()) ? " | root: " + rootMsg : "");
+      throw (SignatureOperationException)
+          new SignatureOperationException(code, msg, e).withDiagnostics(diag);
     }
+  }
 
-    // try-with-resources yerine explicit try/finally: close() hatası imza body'sini suppress
-    // edip yanlış branch'e (IAIK fallback değerlendirmesine) düşmesin. close hatası sadece
-    // log'lanır, orijinal exception (varsa) korunur.
+  /**
+   * Counter-signature'ı SunPKCS11 (P11KeyStore + JSR-105) üzerinden üretir: session aç → imzala →
+   * session'ı kapat. Session açılışı ya da imza gövdesi başarısız olursa exception olduğu gibi
+   * yukarı taşınır; {@link #signHrXmlCounterSignature} hatayı sınıflandırıp gerekirse IAIK native
+   * yoluna ({@link #doCounterSignatureNative}) düşer.
+   *
+   * <p>try-with-resources yerine explicit try/finally: {@code close()} hatası imza body'sini
+   * suppress edip yanlış branch'e (fallback değerlendirmesine) düşmesin. close hatası yalnız
+   * log'lanır, orijinal exception (varsa) korunur.
+   */
+  byte[] signHrCounterSignatureViaSunPkcs11(
+      Path libraryPath, SignDocumentDto dto, SignatureDiagnostics diag) {
+    Pkcs11Session session = Pkcs11Session.open(libraryPath, dto.getPin());
     RuntimeException bodyFailure = null;
     try {
       return signHrWithSession(session, dto, diag);
@@ -335,6 +353,64 @@ public class XadesService {
               closeFail.toString());
         }
       }
+    }
+  }
+
+  /**
+   * Counter-signature SunPKCS11 yolu başarısız olduğunda IAIK native yoluna düşülmeli mi? BES
+   * akışının iki tetikleyicisini ({@link IaikPkcs11Signer#requiresIaikFallback}: CKA_ID collision /
+   * CKR_USER_NOT_LOGGED_IN) raw-only firmware'in algoritma patolojisiyle birleştirir ({@link
+   * #classifySignatureFailure} == {@code ALGORITHM_UNSUPPORTED} → CKR_FUNCTION_NOT_SUPPORTED,
+   * "Unsupported parameters", CKR_MECHANISM_INVALID, ...). Native yol raw {@code CKM_RSA_PKCS} /
+   * {@code CKM_ECDSA} + yazılım digest kullandığı için bu patolojilerin tamamını by-pass eder.
+   */
+  private static boolean requiresCounterSignatureNativeFallback(Throwable t) {
+    return IaikPkcs11Signer.requiresIaikFallback(t)
+        || SignatureOperationException.CODE_ALGORITHM_UNSUPPORTED.equals(
+            classifySignatureFailure(t));
+  }
+
+  /**
+   * {@link #doCounterSignatureNative} sarmalayıcısı: native akış da patlarsa hem SunPKCS11
+   * başarısızlığını hem native başarısızlığını tek bir {@code SignatureOperationException} altında
+   * raporlar (destek logları kök neden zincirini görsün). {@link #doXadesBesSignNativeWithDiag} ile
+   * aynı kalıp.
+   */
+  private byte[] doCounterSignatureNativeWithDiag(
+      byte[] xmlBytes,
+      Path libraryPath,
+      String certIdentifier,
+      String pin,
+      SignatureDiagnostics diag,
+      Throwable sunPkcs11Failure) {
+    mergeWarning(
+        diag,
+        "SunPKCS11 counter-signature yolu başarısız ("
+            + CauseChainExtractor.rootMessage(sunPkcs11Failure)
+            + "); IAIK PKCS#11 wrapper fallback'ine düşüldü.");
+    try {
+      return doCounterSignatureNative(xmlBytes, libraryPath, certIdentifier, pin, diag);
+    } catch (SignerException nativeKnown) {
+      if (nativeKnown.getDiagnostics() == null) {
+        nativeKnown.withDiagnostics(diag);
+      }
+      throw nativeKnown;
+    } catch (Exception nativeFail) {
+      String code = classifySignatureFailure(nativeFail);
+      String rootMsg = CauseChainExtractor.rootMessage(nativeFail);
+      String msg =
+          "XAdES CounterSignature başarısız (native fallback de patladı): "
+              + (nativeFail.getMessage() != null
+                  ? nativeFail.getMessage()
+                  : nativeFail.getClass().getSimpleName())
+              + (rootMsg != null && !rootMsg.equals(nativeFail.getMessage())
+                  ? " | root: " + rootMsg
+                  : "");
+      SignatureOperationException sigEx = new SignatureOperationException(code, msg, nativeFail);
+      if (sunPkcs11Failure != null) {
+        sigEx.addSuppressed(sunPkcs11Failure);
+      }
+      throw (SignatureOperationException) sigEx.withDiagnostics(diag);
     }
   }
 
@@ -490,6 +566,24 @@ public class XadesService {
       throw resolution.getError();
     }
 
+    // Proactive routing: token yalnız raw imzalama mekanizması (CKM_RSA_PKCS / CKM_ECDSA)
+    // destekliyorsa (resolver fallbackStrategy=raw-*-soft-digest), xades4j → SunPKCS11
+    // SHA256withRSA çağrısı kartta multi-part C_SignUpdate'e düşer ve AKIS / SafeSign tipi eski
+    // firmware'lerde CKR_FUNCTION_NOT_SUPPORTED ile patlar ("update() failed"). Bu kartlarda
+    // baştan başarısız olacak xades4j turunu hiç denemeden doğrudan IAIK native yoluna (yazılım
+    // digest + DigestInfo prefix + tek C_Sign) geçiyoruz. Resolver'ın eklediği "raw-only" uyarısı
+    // tanılamada zaten neden bağlamını taşır, bu yüzden ek uyarı koymuyoruz.
+    if (requiresNativeRawSign(diag.getFallbackStrategy())) {
+      log.info(
+          "Token yalnız raw imzalama mekanizması destekliyor (fallbackStrategy={}); SunPKCS11"
+              + " multi-part C_SignUpdate patolojisi (CKR_FUNCTION_NOT_SUPPORTED) atlanıp doğrudan"
+              + " IAIK native imza yoluna geçiliyor (lib={}, certId={}).",
+          diag.getFallbackStrategy(),
+          libraryPath,
+          certIdentifier);
+      return doXadesBesSignNative(xmlBytes, libraryPath, certIdentifier, pin, diag);
+    }
+
     XadesBesSigningProfile profile = new XadesBesSigningProfile(keyingProvider);
     profile.withAlgorithmsProviderEx(resolution.getProvider());
     // Cert public key tipine göre KeyInfo zenginleştirme:
@@ -633,10 +727,13 @@ public class XadesService {
       diag.setResolvedJcaSignature(ec ? "RAW-ECDSA-NATIVE" : "RAW-RSA-NATIVE");
       diag.setResolvedPkcs11Mechanism(mechanismLabel);
       diag.setFallbackStrategy("iaik-pkcs11-sunpkcs11-bypass");
+      // Nötr not: bu yola hem dual-key/login patolojisi fallback'inden hem de raw-only proactive
+      // routing'den gelinir. Spesifik neden (CKA_ID collision / CKR_USER_NOT_LOGGED_IN ya da
+      // raw-only firmware) çağıran katman tarafından / resolver tarafından diag'a eklenir.
       mergeWarning(
           diag,
-          "SunPKCS11 P11KeyStore patolojisi tespit edildi (CKA_ID collision veya"
-              + " CKR_USER_NOT_LOGGED_IN); IAIK PKCS#11 wrapper üzerinden imza atıldı.");
+          "İmza, SunPKCS11 atlanıp IAIK PKCS#11 wrapper üzerinden (yazılım digest + tek C_Sign)"
+              + " atıldı.");
 
       Document document = parseXml(xmlBytes);
       Element root = document.getDocumentElement();
@@ -846,12 +943,15 @@ public class XadesService {
               @Override
               public boolean test(Throwable cur) {
                 String msg = cur.getMessage();
-                return msg != null
-                    && (msg.toLowerCase(Locale.ROOT).contains("ckr_user_not_logged_in")
-                        || (msg.toLowerCase(Locale.ROOT).contains("invalid keystore state")
-                            && msg.toLowerCase(Locale.ROOT).contains("cka_id"))
-                        || (msg.toLowerCase(Locale.ROOT).contains("private keys sharing")
-                            && msg.toLowerCase(Locale.ROOT).contains("cka_id")));
+                if (msg == null) {
+                  return false;
+                }
+                String lower = msg.toLowerCase(Locale.ROOT);
+                return lower.contains("ckr_user_not_logged_in")
+                    || lower.contains("ckr_function_not_supported")
+                    || lower.contains("update() failed")
+                    || (lower.contains("invalid keystore state") && lower.contains("cka_id"))
+                    || (lower.contains("private keys sharing") && lower.contains("cka_id"));
               }
             });
     if (match == null) {
@@ -860,6 +960,9 @@ public class XadesService {
     String lower = match.getMessage().toLowerCase(Locale.ROOT);
     if (lower.contains("ckr_user_not_logged_in")) {
       return "CKR_USER_NOT_LOGGED_IN (session-scoped login state, AKİS / SafeSign tipik)";
+    }
+    if (lower.contains("ckr_function_not_supported") || lower.contains("update() failed")) {
+      return "CKR_FUNCTION_NOT_SUPPORTED (raw-only firmware, multi-part C_SignUpdate desteklenmiyor)";
     }
     if (lower.contains("invalid keystore state") && lower.contains("cka_id")) {
       return "CKA_ID collision (NES Bulut dual-key SIGN0+SIGN1)";
@@ -890,6 +993,26 @@ public class XadesService {
    */
   static String resolveKeyHint(X509Certificate cert) {
     return isEcdsa(cert) ? "EC" : "RSA";
+  }
+
+  /**
+   * Resolver'ın seçtiği {@code fallbackStrategy} token'ın yalnız <em>raw</em> imzalama mekanizması
+   * ({@code CKM_RSA_PKCS} ya da {@code CKM_ECDSA}) desteklediğini — yani digest'in yazılım tarafında
+   * hesaplanıp karta padding'siz / DigestInfo'lu verilmesi gerektiğini — gösteriyorsa {@code true}.
+   *
+   * <p>Bu kartlarda xades4j → SunPKCS11 yolu {@code SHA256withRSA} çağrısını multi-part {@code
+   * C_SignUpdate}'e çevirir; AKIS / SafeSign tipi firmware'ler {@code C_SignUpdate}'i implemente
+   * etmediği için {@code CKR_FUNCTION_NOT_SUPPORTED} ("update() failed") fırlatır. {@link
+   * #doXadesBesSign} bu durumda doomed xades4j turunu atlayıp doğrudan {@link
+   * #doXadesBesSignNative} (yazılım digest + tek {@code C_Sign}) yoluna yönlendirir.
+   *
+   * <p>Combined mekanizmalar ({@code CKM_SHA256_RSA_PKCS}, {@code CKM_ECDSA_SHA384}, {@code
+   * CKM_SHA1_RSA_PKCS}, ...) kartta digest'i kendisi hesapladığı için SunPKCS11 yolu sorunsuz
+   * çalışır ve bu metot {@code false} döner.
+   */
+  static boolean requiresNativeRawSign(String fallbackStrategy) {
+    return "raw-rsa-soft-digest".equals(fallbackStrategy)
+        || "raw-ecdsa-soft-digest".equals(fallbackStrategy);
   }
 
   /** {@link #resolveKeyHint} için boolean adapter. */
@@ -1076,6 +1199,157 @@ public class XadesService {
     // doğrulanmış / digest'lenmiş; mutasyon riski almıyoruz).
     rewrapBase64InSignatureSubtree(counterSig);
     return serialise(doc);
+  }
+
+  /**
+   * {@link #doCounterSignature}'ın IAIK PKCS#11 wrapper karşılığı: SunPKCS11 P11KeyStore'u (ve
+   * JSR-105 {@code DOMSignContext} PrivateKey imzasını) tamamen atlayıp doğrudan PKCS#11 spec
+   * çağrılarıyla ({@code C_SignInit + C_Sign}) counter-signature üretir.
+   *
+   * <p>Bu yol yalnız <b>fallback</b> olarak çağrılır: SunPKCS11 yolu CKA_ID collision /
+   * CKR_USER_NOT_LOGGED_IN ya da raw-only firmware'in CKR_FUNCTION_NOT_SUPPORTED patolojisiyle
+   * patladığında {@link #signHrXmlCounterSignature} buraya yönlendirir.
+   *
+   * <p>Üretilen XAdES-BES counter-signature {@link #doCounterSignature} ile <b>bire bir aynı
+   * yapısaldır</b>: SignedInfo c14n = inclusive-with-comments; iki Reference (kendi
+   * SignedProperties — transform yok, Type=SignedProperties; karşı imzalanan SignatureValue —
+   * inclusive-with-comments c14n transform, Type=CountersignedSignature); KeyInfo = X509Data +
+   * KeyValue; Object/QualifyingProperties/SignedProperties (SigningTime + SigningCertificate). Tek
+   * fark imza üretiminin SunPKCS11 yerine {@link IaikPkcs11Signer} üzerinden yazılım digest +
+   * DigestInfo prefix (RSA) / ham hash (EC) + tek {@code C_Sign} ile yapılmasıdır.
+   */
+  byte[] doCounterSignatureNative(
+      byte[] xmlBytes,
+      Path libraryPath,
+      String certIdentifier,
+      String pin,
+      SignatureDiagnostics diag)
+      throws Exception {
+    BouncyCastleSetup.ensureRegistered();
+    Init.init();
+
+    try (IaikPkcs11Signer signer = IaikPkcs11Signer.open(libraryPath, pin)) {
+      IaikPkcs11Signer.NativeSigningKey nativeKey = signer.findSigningKey(certIdentifier);
+      X509Certificate signingCert = nativeKey.getCertificate();
+      boolean ec = nativeKey.isEc() || isEcdsa(signingCert);
+
+      String digestUrl = ec ? DIGEST_SHA384 : DigestMethod.SHA256;
+      String sigUrl = ec ? SIG_ECDSA_SHA384 : SIG_RSA_SHA256;
+      String digestJca = ec ? "SHA-384" : "SHA-256";
+      long pkcs11Mechanism = ec ? IaikPkcs11Signer.CKM_ECDSA : IaikPkcs11Signer.CKM_RSA_PKCS;
+      String mechanismLabel = ec ? "CKM_ECDSA" : "CKM_RSA_PKCS";
+
+      diag.setKeyAlgorithm(ec ? "EC" : "RSA");
+      try {
+        diag.setKeySize(estimateKeySizeBits(signingCert));
+      } catch (RuntimeException ignore) {
+        /* tanılama best-effort */
+      }
+      diag.setAttemptedSignatureAlgorithm(sigUrl);
+      diag.setResolvedJcaSignature(ec ? "RAW-ECDSA-NATIVE" : "RAW-RSA-NATIVE");
+      diag.setResolvedPkcs11Mechanism(mechanismLabel);
+      diag.setFallbackStrategy("iaik-pkcs11-sunpkcs11-bypass");
+      mergeWarning(
+          diag,
+          "İmza, SunPKCS11 atlanıp IAIK PKCS#11 wrapper üzerinden (yazılım digest + tek C_Sign)"
+              + " atıldı.");
+
+      Document doc = parseXml(xmlBytes);
+
+      NodeList sigs = doc.getElementsByTagNameNS(DS_NS, "Signature");
+      if (sigs.getLength() == 0) {
+        throw new IllegalArgumentException(
+            "XML'de imzalanacak <ds:Signature> bulunamadı (counter-sig için zorunlu).");
+      }
+      Element existingSig = (Element) sigs.item(0);
+
+      Element parentSigValueEl = findChildSignatureValue(existingSig);
+      if (parentSigValueEl == null) {
+        throw new IllegalArgumentException(
+            "Mevcut <ds:Signature> içinde <ds:SignatureValue> yok.");
+      }
+      // Karşı imzalanacak SignatureValue'a XML ID garantisi (URI fragment dereferencing için).
+      String parentSigValueId = parentSigValueEl.getAttribute("Id");
+      if (parentSigValueId == null || parentSigValueId.isEmpty()) {
+        parentSigValueId = "Signature-Value-Id-" + UUID.randomUUID();
+        parentSigValueEl.setAttribute("Id", parentSigValueId);
+      }
+      parentSigValueEl.setIdAttribute("Id", true);
+
+      Element ussp = findOrCreateUnsignedSignatureProperties(existingSig, doc);
+      Element counterSig = doc.createElementNS(XADES_NS, "xades:CounterSignature");
+      ussp.appendChild(counterSig);
+
+      String counterSigId = "Signature-Id-" + UUID.randomUUID();
+      String counterSigValueId = "Signature-Value-Id-" + UUID.randomUUID();
+      String signedPropsId = "Signed-Properties-Id-" + UUID.randomUUID();
+      String objectId = "Object-Id-" + UUID.randomUUID();
+      String signedPropsRefId = "Reference-Id-" + UUID.randomUUID();
+      String counterRefId = "Reference-Id-" + UUID.randomUUID();
+
+      // SignedInfo c14n = inclusive WithComments (JSR-105 doCounterSignature ile paritede).
+      org.apache.xml.security.signature.XMLSignature santSig =
+          new org.apache.xml.security.signature.XMLSignature(
+              doc, "", sigUrl, Transforms.TRANSFORM_C14N_WITH_COMMENTS);
+      santSig.setId(counterSigId);
+      counterSig.appendChild(santSig.getElement());
+
+      // Reference 1: kendi SignedProperties — transform YOK, Type=SignedProperties.
+      santSig.addDocument(
+          "#" + signedPropsId, null, digestUrl, signedPropsRefId, XADES_TYPE_SIGNED_PROPERTIES);
+
+      // Reference 2: karşı imzalanan SignatureValue — inclusive-with-comments c14n transform,
+      // Type=CountersignedSignature.
+      Transforms counterTfs = new Transforms(doc);
+      counterTfs.addTransform(Transforms.TRANSFORM_C14N_WITH_COMMENTS);
+      santSig.addDocument(
+          "#" + parentSigValueId,
+          counterTfs,
+          digestUrl,
+          counterRefId,
+          XADES_TYPE_COUNTERSIGNED_SIGNATURE);
+
+      // KeyInfo: <ds:X509Data><ds:X509Certificate> + <ds:KeyValue> (instanceof dispatch ile
+      // RSAKeyValue / ECKeyValue).
+      santSig.addKeyInfo(signingCert);
+      santSig.addKeyInfo(signingCert.getPublicKey());
+
+      // Object/QualifyingProperties/SignedProperties (BES native path'iyle aynı şablon).
+      ObjectContainer obj = new ObjectContainer(doc);
+      obj.setId(objectId);
+      Element qualifyingProps = buildQualifyingProperties(doc, counterSigId, signedPropsId);
+      Element signedPropsEl = (Element) qualifyingProps.getFirstChild();
+      populateSignedProperties(doc, signedPropsEl, signingCert, digestUrl);
+      obj.getElement().appendChild(qualifyingProps);
+      santSig.appendObject(obj);
+
+      // Reference DigestValue'ları hesapla (PrivateKey'siz).
+      santSig.getSignedInfo().generateDigestValues();
+
+      // SignedInfo canonical bytes → software digest → native PKCS#11 imza.
+      byte[] siCanonical = santSig.getSignedInfo().getCanonicalizedOctetStream();
+      MessageDigest md = MessageDigest.getInstance(digestJca);
+      byte[] tbsHash = md.digest(siCanonical);
+      byte[] dataToSign = ec ? tbsHash : rsaDigestInfo(tbsHash, digestJca);
+      byte[] rawSignature = signer.sign(nativeKey, pkcs11Mechanism, dataToSign);
+      if (rawSignature == null || rawSignature.length == 0) {
+        throw new SignatureOperationException(
+            "Native PKCS#11 C_Sign boş imza döndürdü (mech=" + mechanismLabel + ").");
+      }
+
+      NodeList svList = santSig.getElement().getElementsByTagNameNS(DS_NS, "SignatureValue");
+      if (svList.getLength() == 0) {
+        throw new SignatureOperationException(
+            "Santuario XMLSignature iskeletinde <ds:SignatureValue> bulunamadı.");
+      }
+      Element svEl = (Element) svList.item(0);
+      svEl.setAttribute("Id", counterSigValueId);
+      svEl.setTextContent(Base64.getEncoder().encodeToString(rawSignature));
+
+      // Sadece counter-signature subtree'sinde rewrap — parent imzanın c14n parity'sini koru.
+      rewrapBase64InSignatureSubtree(counterSig);
+      return serialise(doc);
+    }
   }
 
   /**
