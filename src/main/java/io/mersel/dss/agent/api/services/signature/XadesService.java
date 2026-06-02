@@ -997,8 +997,9 @@ public class XadesService {
 
   /**
    * Resolver'ın seçtiği {@code fallbackStrategy} token'ın yalnız <em>raw</em> imzalama mekanizması
-   * ({@code CKM_RSA_PKCS} ya da {@code CKM_ECDSA}) desteklediğini — yani digest'in yazılım tarafında
-   * hesaplanıp karta padding'siz / DigestInfo'lu verilmesi gerektiğini — gösteriyorsa {@code true}.
+   * ({@code CKM_RSA_PKCS} ya da {@code CKM_ECDSA}) desteklediğini — yani digest'in yazılım
+   * tarafında hesaplanıp karta padding'siz / DigestInfo'lu verilmesi gerektiğini — gösteriyorsa
+   * {@code true}.
    *
    * <p>Bu kartlarda xades4j → SunPKCS11 yolu {@code SHA256withRSA} çağrısını multi-part {@code
    * C_SignUpdate}'e çevirir; AKIS / SafeSign tipi firmware'ler {@code C_SignUpdate}'i implemente
@@ -1265,8 +1266,7 @@ public class XadesService {
 
       Element parentSigValueEl = findChildSignatureValue(existingSig);
       if (parentSigValueEl == null) {
-        throw new IllegalArgumentException(
-            "Mevcut <ds:Signature> içinde <ds:SignatureValue> yok.");
+        throw new IllegalArgumentException("Mevcut <ds:Signature> içinde <ds:SignatureValue> yok.");
       }
       // Karşı imzalanacak SignatureValue'a XML ID garantisi (URI fragment dereferencing için).
       String parentSigValueId = parentSigValueEl.getAttribute("Id");
