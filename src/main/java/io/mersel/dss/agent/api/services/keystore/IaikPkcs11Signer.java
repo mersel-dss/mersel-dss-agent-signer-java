@@ -261,7 +261,8 @@ public final class IaikPkcs11Signer implements AutoCloseable {
     }
 
     char[] pinChars = pin == null ? new char[0] : pin.toCharArray();
-    org.xipki.pkcs11.wrapper.Token tokenObj = selectSlot(slots, terminalName, libraryPath).getToken();
+    org.xipki.pkcs11.wrapper.Token tokenObj =
+        selectSlot(slots, terminalName, libraryPath).getToken();
 
     PKCS11Token p11Token;
     try {
@@ -291,20 +292,20 @@ public final class IaikPkcs11Signer implements AutoCloseable {
    *
    * <p>{@code SunPKCS11}, config'inde {@code slot} / {@code slotListIndex} verilmezse default
    * olarak {@code C_GetSlotList()}'in <b>0. slot'unu</b> hedefler. Bir makinede birden çok akıllı
-   * kart sürücüsü kuruluyken (Aladdin VR Handler, Rainbow iKey Virtual Reader, ...) bu liste
-   * <b>boş sanal okuyucuları</b> da içerir. Gerçek kart 0. slot'ta değilse SunPKCS11 token bulamaz;
-   * provider hiçbir algoritma register etmez ve {@code KeyStore.getInstance("PKCS11", provider)}
-   * şu hatayı verir:
+   * kart sürücüsü kuruluyken (Aladdin VR Handler, Rainbow iKey Virtual Reader, ...) bu liste <b>boş
+   * sanal okuyucuları</b> da içerir. Gerçek kart 0. slot'ta değilse SunPKCS11 token bulamaz;
+   * provider hiçbir algoritma register etmez ve {@code KeyStore.getInstance("PKCS11", provider)} şu
+   * hatayı verir:
    *
    * <pre>
    * NoSuchAlgorithmException: no such algorithm: PKCS11 for provider SunPKCS11-...
    *   └─ KeyStoreException: PKCS11 not found
    * </pre>
    *
-   * <p>Bu metod {@code getSlotList(true)} (yalnız token-present slotlar) ile gerçek kartın
-   * slot'unu tespit eder; çağıran SunPKCS11'i o slot'a kilitleyerek phantom okuyuculardan
-   * etkilenmez. {@link #open}'ın izlediği "ilk token-present slot" mantığıyla birebir aynıdır;
-   * iki yol aynı kartı seçer.
+   * <p>Bu metod {@code getSlotList(true)} (yalnız token-present slotlar) ile gerçek kartın slot'unu
+   * tespit eder; çağıran SunPKCS11'i o slot'a kilitleyerek phantom okuyuculardan etkilenmez. {@link
+   * #open}'ın izlediği "ilk token-present slot" mantığıyla birebir aynıdır; iki yol aynı kartı
+   * seçer.
    *
    * <h3>Maliyet</h3>
    *
@@ -330,8 +331,8 @@ public final class IaikPkcs11Signer implements AutoCloseable {
    * {@link #findTokenPresentSlotId(java.nio.file.Path)} ile aynı; ek olarak seçilen PC/SC okuyucu
    * adını ({@code terminalName}) alır. Aynı kütüphanede birden çok token-present slot varsa (iki
    * gerçek kart) açıklaması okuyucu adıyla eşleşen slot'un {@code slotID}'sini döndürür; eşleşme
-   * yoksa ilk token-present slot'a düşülür. Böylece hem "boş sanal okuyucu slot 0'ı kapıyor"
-   * (tek kart) hem de "iki gerçek kart" senaryosu doğru kartı seçer.
+   * yoksa ilk token-present slot'a düşülür. Böylece hem "boş sanal okuyucu slot 0'ı kapıyor" (tek
+   * kart) hem de "iki gerçek kart" senaryosu doğru kartı seçer.
    *
    * @param libraryPath PKCS#11 kütüphane yolu ({@code null} ise boş döner)
    * @param terminalName kullanıcının seçtiği PC/SC okuyucu adı ({@code null}/boş ise ilk
@@ -347,7 +348,8 @@ public final class IaikPkcs11Signer implements AutoCloseable {
       ModuleEntry entry = openOrGetModule(libraryPath.toString());
       Slot[] slots = entry.module.getSlotList(true); // tokenPresent=true → boş okuyucular elenir
       if (slots == null || slots.length == 0) {
-        log.debug("Token-present slot bulunamadı (lib={}); slot satırsız config'e düşülecek.",
+        log.debug(
+            "Token-present slot bulunamadı (lib={}); slot satırsız config'e düşülecek.",
             libraryPath);
         return OptionalLong.empty();
       }
@@ -412,8 +414,8 @@ public final class IaikPkcs11Signer implements AutoCloseable {
    *
    * <p>Sertifika listeleme ({@link Pkcs11PublicCertificateReader}) gibi "ya doğru karta daralt ya
    * da olduğu gibi bırak" semantiği isteyen akışlar için. (İmza yolu eşleşme yoksa ilk
-   * token-present slot'a düşer — bkz. {@link #selectSlot}; listeleme ise eşleşme yoksa tüm
-   * slotları okumaya devam eder, kullanıcının kartını gizlememek için.)
+   * token-present slot'a düşer — bkz. {@link #selectSlot}; listeleme ise eşleşme yoksa tüm slotları
+   * okumaya devam eder, kullanıcının kartını gizlememek için.)
    */
   public static OptionalLong matchSlotIdByTerminal(
       java.nio.file.Path libraryPath, String terminalName) {
@@ -476,7 +478,9 @@ public final class IaikPkcs11Signer implements AutoCloseable {
     return null;
   }
 
-  /** PC/SC okuyucu adı ↔ slot açıklaması karşılaştırması için normalize (trim + tek boşluk + lc). */
+  /**
+   * PC/SC okuyucu adı ↔ slot açıklaması karşılaştırması için normalize (trim + tek boşluk + lc).
+   */
   private static String normalizeReaderName(String s) {
     if (s == null) {
       return "";

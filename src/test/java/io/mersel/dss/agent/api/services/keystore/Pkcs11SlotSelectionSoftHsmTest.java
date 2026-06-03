@@ -69,8 +69,8 @@ import org.junit.jupiter.api.Test;
  * </pre>
  *
  * <p>SoftHSM token'ı init edilince ek olarak <b>bir boş (uninitialized) spare slot</b> da sunar;
- * yani bu test zaten "fazladan boş slot var" koşulunu içerir. {@code findTokenPresentSlotId}
- * {@code getSlotList(true)} kullandığı için boş slot'u eler ve gerçek slotID'yi döndürür.
+ * yani bu test zaten "fazladan boş slot var" koşulunu içerir. {@code findTokenPresentSlotId} {@code
+ * getSlotList(true)} kullandığı için boş slot'u eler ve gerçek slotID'yi döndürür.
  */
 class Pkcs11SlotSelectionSoftHsmTest {
 

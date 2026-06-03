@@ -110,8 +110,7 @@ public class CertificateListingService {
 
     // Aynı anda birden çok kart takılıyken seçilen okuyucunun slot'una daralt; eşleşme yoksa
     // (terminalName boş ya da vendor slot açıklaması okuyucu adıyla uyuşmuyor) tüm slotlar okunur.
-    OptionalLong scopedSlot =
-        IaikPkcs11Signer.matchSlotIdByTerminal(libraryPath, terminalName);
+    OptionalLong scopedSlot = IaikPkcs11Signer.matchSlotIdByTerminal(libraryPath, terminalName);
     if (scopedSlot.isPresent()) {
       log.info(
           "Sertifika listeleme terminal='{}' → slotID={} ile sınırlandı.",
