@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-06-03
+
 ### Changed
 
 - **Harici (jar-dışı) yapılandırma yüklemesi devre dışı bırakıldı — çalışma
@@ -1578,7 +1580,8 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.0.6...v1.1.0
