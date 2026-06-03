@@ -27,6 +27,7 @@
 package io.mersel.dss.agent.api;
 
 import java.awt.GraphicsEnvironment;
+import java.util.Collections;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -51,9 +52,23 @@ import io.mersel.dss.agent.api.ui.SplashLifecycle;
 @ConfigurationPropertiesScan
 public class SignerApplication {
 
+  /**
+   * Config dosyalarını YALNIZCA jar'ın içindeki classpath kaynaklarıyla sınırlar. Spring Boot'un
+   * varsayılan harici tarama yolları ({@code file:./}, {@code file:./config/}, {@code
+   * file:./config/*}{@code /}) bilinçli olarak devre dışı bırakılır: agent, kullanıcı makinesinde
+   * çalışan dışa kapalı bir daemon olduğundan çalışma dizinine bırakılan bir {@code application.*}
+   * dosyası ne yapılandırmayı ezebilmeli ne de (örn. DOCTYPE'sız {@code application.xml}) başlangıcı
+   * bozabilmeli. Çalışma zamanı override'ları yine ortam değişkenleri ({@code MERSEL_AGENT_*}) ve
+   * komut satırı argümanlarıyla yapılır; bunlar config-dosyası konumu değil, ayrı property
+   * source'lardır ve bu kısıttan etkilenmez.
+   */
+  private static final String CONFIG_LOCATION = "optional:classpath:/";
+
   public static void main(String[] args) {
     maybeShowSplash();
-    SpringApplication.run(SignerApplication.class, args);
+    SpringApplication app = new SpringApplication(SignerApplication.class);
+    app.setDefaultProperties(Collections.singletonMap("spring.config.location", CONFIG_LOCATION));
+    app.run(args);
   }
 
   /**

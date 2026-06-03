@@ -6,6 +6,40 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Changed
+
+- **Harici (jar-dışı) yapılandırma yüklemesi devre dışı bırakıldı — çalışma
+  dizinine bırakılan `application.*` dosyası artık ne okunuyor ne de başlangıcı
+  bozabiliyor**: agent, kullanıcı makinesinde çalışan dışa kapalı bir daemon
+  olduğundan tüm yapılandırması jar içindeki gömülü `application.yml`'den gelir.
+  Buna rağmen Spring Boot, varsayılan olarak çalışma dizinini ve `config/` alt
+  dizinlerini (`file:./`, `file:./config/`, `file:./config/*/`) `application.*`
+  dosyaları için tarıyordu.
+
+  **Kök neden / belirti**: çalışma dizininde (Windows'ta CWD; servis/görev
+  olarak çalıştırıldığında çoğu zaman `C:\Windows\System32`) adı `application.xml`
+  olan sıradan bir XML bulunduğunda Spring bunu **Java Properties XML** sanıp
+  `Properties.loadFromXML()` ile parse etmeye çalışıyor; dosyada zorunlu DOCTYPE
+  bulunmadığı için uygulama daha environment hazırlanırken devriliyordu:
+
+  ```
+  IllegalStateException: IO error on loading imports from
+    [optional:file:./;optional:file:./config/;optional:file:./config/*/]
+    └─ InvalidPropertiesFormatException: An XML properties document must
+       contain the DOCTYPE declaration as defined by java.util.Properties.
+  ```
+
+  **Çözüm**: `SignerApplication.main`, `SpringApplication.run` çağrılmadan önce
+  `setDefaultProperties` ile `spring.config.location=optional:classpath:/`
+  veriyor. Bu, varsayılan dosya tarama yollarını **tamamen** kaldırır; config
+  yalnızca jar içindeki classpath kaynağından (`application.yml`) okunur.
+  Değer, config-dosyası tarama mantığı (`ConfigDataEnvironmentPostProcessor`)
+  çalışmadan önce environment'a eklendiği için zamanlama doğrudur ve OS'tan
+  bağımsız çalışır (macOS'ta, bozuk `application.xml` + `config/application.xml`
+  içeren bir dizinden başlatılarak doğrulandı). Çalışma zamanı override'ları
+  config dosyası değil ayrı property source oldukları için etkilenmez: ortam
+  değişkenleri (`MERSEL_AGENT_*`) ve komut satırı argümanları aynen çalışır.
+
 ## [1.1.2] — 2026-06-03
 
 ### Fixed
