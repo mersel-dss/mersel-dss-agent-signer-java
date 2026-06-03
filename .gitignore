@@ -3,6 +3,10 @@ target/
 *.class
 *.jar
 
+# --- Dağıtım paketleme (package-dist.sh) ---
+/dist/
+/.tooling/
+
 # --- IDE & editor ---
 .idea/
 .vscode/
