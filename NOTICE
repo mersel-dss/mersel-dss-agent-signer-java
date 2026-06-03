@@ -110,6 +110,39 @@ respective original licenses. See each component's own LICENSE/NOTICE
 file and Maven artifact metadata.
 
 --------------------------------------------------------------------------------
+Gömülü Java Çalışma Ortamı / Bundled Java Runtime
+--------------------------------------------------------------------------------
+
+Bu projenin "bundled-JRE" dağıtım paketleri (scripts/package-dist.sh ile
+üretilen, platforma özel ZIP'ler) son kullanıcının ayrıca Java kurmasına
+gerek kalmaması için değiştirilmemiş bir OpenJDK 8 çalışma ortamını (JRE)
+içerir:
+
+  - Eclipse Temurin (Adoptium) JRE 8 — Windows x64/x86, macOS x64, Linux
+    x64. Lisans: GPLv2 with Classpath Exception. https://adoptium.net
+  - Azul Zulu Build of OpenJDK, JRE 8 — macOS arm64 (Apple Silicon), zira
+    Temurin Java 8 için aarch64 macOS build'i yayımlamaz. Lisans: GPLv2
+    with Classpath Exception. https://www.azul.com/downloads/
+
+Bu çalışma ortamları kendi orijinal lisansları altında, değiştirilmeden
+yeniden dağıtılır. Her paketin runtime/ dizininde ilgili JRE'nin kendi
+LICENSE, ASSEMBLY_EXCEPTION ve THIRD_PARTY_README dosyaları bulunur.
+
+The "bundled-JRE" distribution packages of this project (the per-platform
+ZIPs produced by scripts/package-dist.sh) include an unmodified OpenJDK 8
+runtime (JRE) so that end users need not install Java separately:
+
+  - Eclipse Temurin (Adoptium) JRE 8 — Windows x64/x86, macOS x64, Linux
+    x64. License: GPLv2 with Classpath Exception. https://adoptium.net
+  - Azul Zulu Build of OpenJDK, JRE 8 — macOS arm64 (Apple Silicon), as
+    Temurin publishes no aarch64 macOS build for Java 8. License: GPLv2
+    with Classpath Exception. https://www.azul.com/downloads/
+
+These runtimes are redistributed unmodified under their original licenses;
+each package's runtime/ directory contains that JRE's own LICENSE,
+ASSEMBLY_EXCEPTION, and THIRD_PARTY_README files.
+
+--------------------------------------------------------------------------------
 IAIK PKCS#11 Wrapper Atfı / IAIK PKCS#11 Wrapper Attribution
 --------------------------------------------------------------------------------
 

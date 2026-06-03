@@ -41,10 +41,33 @@ adrese HTTP istekleri atarak:
 
 ### Uygulamayı başlatma
 
-Java 8 makinede kuruluysa **`.jar` dosyasına çift tıklamak yeterli** —
-macOS Finder, Linux file manager (Nautilus / Dolphin / Files) ve Windows
-Explorer üçü de standart Java Runtime association'ı varsayar. Çift
-tıkladığında:
+İki dağıtım biçimi vardır:
+
+**1) Bundled-JRE paketi — Java kurulumu GEREKMEZ (önerilir).** İşletim
+sistemine uygun ZIP'i indir, aç ve klasörün kökündeki başlatıcıya çift
+tıkla. Gerekli Java çalışma ortamı (JRE) paketin içindedir; makinede Java
+kurulu olmasına gerek yoktur.
+
+| Platform | Paket | Kökteki başlatıcı |
+|---|---|---|
+| Windows x64 / x86 | `…-windows-x64.zip` / `…-windows-x86.zip` | `Mersel DSS Agent.exe` |
+| macOS (Apple Silicon) | `…-macos-arm64.zip` | `Mersel DSS Agent.app` |
+| macOS (Intel) | `…-macos-x64.zip` | `Mersel DSS Agent.app` |
+| Linux x64 | `…-linux-x64.zip` | `Mersel-DSS-Agent.sh` |
+
+Çalıştırılabilir `.jar`, paketin `app/` alt klasöründe gizlidir; kullanıcı
+her zaman kökteki başlatıcıyı kullanır — bu, jar'a yanlışlıkla çift tıklayıp
+sistemdeki (uyumsuz olabilecek) Java ile açma riskini ortadan kaldırır.
+Başlatıcı her zaman paketteki gömülü JRE'yi kullanır. Paketler
+`scripts/package-dist.sh` ile üretilir (Temurin JRE 8; macOS arm64 için Azul
+Zulu JRE 8 — Temurin'in Java 8 aarch64 macOS build'i yoktur).
+
+**2) Tek jar — Java 8 kuruluysa.** Makinede Java 8 kuruluysa `.jar`
+dosyasına çift tıklamak da yeterlidir; macOS Finder, Linux file manager
+(Nautilus / Dolphin / Files) ve Windows Explorer standart Java Runtime
+association'ı varsayar.
+
+Her iki durumda da, uygulama açıldığında:
 
 1. Kısa bir splash penceresi açılır,
 2. Uygulama `http://localhost:15212` adresinde dinlemeye başlar,
@@ -59,11 +82,9 @@ Terminal alternatifi (CI / sunucu / Docker için):
 java -jar mersel-dss-agent-signer-api-X.Y.Z.jar
 ```
 
-> **Önkoşul:** Java 8+ kurulu olmalı. Native installer
-> (`.msi` / `.pkg` / `.deb` / `.rpm` — bundled JRE'li, Java aramayan)
-> yol haritasında — JDK 17 portu kalemi tamamlanınca jpackage tabanlı
-> paketler eklenecek; o noktada "Java kurulu mu?" sorusu da ortadan
-> kalkar.
+> **Önkoşul (yalnızca jar için):** Java 8+ kurulu olmalı. Bundled-JRE
+> paketleri (1. seçenek) bu önkoşulu ortadan kaldırır. Native installer
+> (`.msi` / `.pkg` / `.deb` / `.rpm`) ise hâlâ yol haritasındadır.
 
 ### 3 adımda imza akışı
 
@@ -599,10 +620,10 @@ Güvenlik açığı bildirmek için: [SECURITY.md](SECURITY.md).
       validation
 - [ ] CAdES desteği (e-İrsaliye / e-Reçete varyantları için)
 - [ ] PKCS#11 session pooling
-- [ ] JDK 17+ hattı (reflection'sız PKCS#11) — bu kalemle birlikte
-      native installer'lar (jpackage MSI / PKG / DEB) açılır; şu an JDK 8
-      runtime constraint'i jpackage'ın modular runtime gereksinimi ile
-      uyumsuz
+- [x] Taşınabilir bundled-JRE paketleri (platform-özel ZIP; Temurin/Zulu
+      JRE 8 gömülü, Java kurulumu gerektirmez) — `scripts/package-dist.sh`
+- [ ] JDK 17+ hattı (reflection'sız PKCS#11) — bu kalemle birlikte native
+      installer'lar (jpackage MSI / PKG / DEB) da açılır
 - [ ] CSRF guard (`X-Requested-By` header zorunluluğu) + per-terminal
       rate-limit (PIN-blocking koruması)
 
