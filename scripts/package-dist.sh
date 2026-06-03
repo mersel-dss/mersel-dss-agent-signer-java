@@ -66,29 +66,52 @@ mkdir -p "$OUT" "$CACHE"
 # ---- yardımcılar ----
 copy_tree() { tar -C "$1" -cf - . | tar -C "$2" -xf - ; }   # symlink/perm korur
 
-temurin_url() { echo "https://api.adoptium.net/v3/binary/latest/8/ga/$1/$2/jre/hotspot/normal/eclipse"; }
-zulu_url() {
-  curl -fsSL "https://api.azul.com/metadata/v1/zulu/packages/?java_version=8&os=$1&arch=$2&archive_type=tar.gz&java_package_type=jre&javafx_bundled=false&latest=true&release_status=ga&page_size=1" \
-    | grep -oE '"download_url":"[^"]+"' | head -1 | sed 's/"download_url":"//; s/"$//'
+# Sabit (pinned) JRE 8 indirme linkleri + SHA-256. Script bunları DOĞRUDAN kullanır;
+# çalışma anında bir API'ye sorup "nereden indireyim" araması YAPMAZ. Bu, build'i
+# deterministik + tekrarlanabilir yapar ve indirilen arşivin bütünlüğünü doğrular.
+# Sürüm yükseltmek için sadece bu tabloyu (URL + sha256) güncelle. Adoptium GA
+# release asset'leri ve Azul CDN'in sürümlü dosyaları değişmezdir (immutable),
+# bu yüzden sha sabit kalır.
+#   Temurin: https://adoptium.net   |   Azul Zulu: https://www.azul.com/downloads/
+jre_pin() {  # target_id -> "URL|SHA256"
+  case "$1" in
+    windows-x64) echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u492-b09/OpenJDK8U-jre_x64_windows_hotspot_8u492b09.zip|bb25b002556afc7ef158cd95ec6270dddb3eecba69acdd7abb9d28b2e9ff0f5e";;
+    windows-x86) echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u472-b08/OpenJDK8U-jre_x86-32_windows_hotspot_8u472b08.zip|21a2c5af684a658f1484daa85eabf4961ab9de28c0efbf31da2381d77fce3b5f";;
+    macos-x64)   echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u492-b09/OpenJDK8U-jre_x64_mac_hotspot_8u492b09.tar.gz|e4acfc82781f0a4ec1fb9785afee41dcb4bb444655d445a2b31edbacbe6bf040";;
+    macos-arm64) echo "https://cdn.azul.com/zulu/bin/zulu8.94.0.17-ca-jre8.0.492-macosx_aarch64.tar.gz|1042604675870d658da6fdf74160f095cae68c37d042e98a33a2462b89ad4108";;
+    linux-x64)   echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u492-b09/OpenJDK8U-jre_x64_linux_hotspot_8u492b09.tar.gz|8eef3d4a837bb7a9e45d30a7579d84d5b76a4321f4376573311e6bf89e48f9b0";;
+    *) return 1;;
+  esac
 }
 
-# JRE'yi (önbellekli) indir+çıkar; bin/java içeren JAVA_HOME dizinini yazdır
-fetch_jre() {
-  local kind="$1" os="$2" arch="$3" key="$1-$2-$3" dest
-  dest="$CACHE/$1-$2-$3"
+sha256_of() {  # file -> hex digest
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  else sha256sum "$1" | awk '{print $1}'; fi
+}
+
+# JRE'yi (önbellekli, pinned URL'den, SHA-256 doğrulamalı) indir+çıkar; JAVA_HOME yaz
+fetch_jre() {  # target_id
+  local id="$1" dest pin url sha ext got
+  dest="$CACHE/$id"
+  pin="$(jre_pin "$id")" || { echo "HATA: $id için pinned JRE linki tanımlı değil" >&2; return 1; }
+  url="${pin%%|*}"; sha="${pin##*|}"
   if [ ! -d "$dest/x" ]; then
-    echo "    JRE indiriliyor: $key" >&2
+    echo "    JRE indiriliyor: $id  (${url##*/})" >&2
     rm -rf "$dest"; mkdir -p "$dest/x"
-    local url ext
-    if [ "$kind" = temurin ]; then url="$(temurin_url "$os" "$arch")"; else url="$(zulu_url "$os" "$arch")"; fi
-    [ -n "$url" ] || { echo "HATA: JRE URL yok: $key" >&2; return 1; }
-    case "$os" in windows) ext=zip;; *) ext="tgz";; esac
+    case "$url" in *.zip) ext=zip;; *) ext=tgz;; esac
     curl -fsSL "$url" -o "$dest/jre.$ext"
+    got="$(sha256_of "$dest/jre.$ext")"
+    if [ "$got" != "$sha" ]; then
+      echo "HATA: SHA-256 uyuşmadı ($id)" >&2
+      echo "      beklenen: $sha" >&2
+      echo "      gelen   : $got" >&2
+      rm -rf "$dest"; return 1
+    fi
     if [ "$ext" = zip ]; then unzip -q "$dest/jre.$ext" -d "$dest/x"; else tar -xzf "$dest/jre.$ext" -C "$dest/x"; fi
   fi
   local javabin
   javabin="$(find "$dest/x" \( -name java -o -name java.exe \) -path '*/bin/*' | head -1)"
-  [ -n "$javabin" ] || { echo "HATA: java binary yok: $key" >&2; return 1; }
+  [ -n "$javabin" ] || { echo "HATA: java binary yok: $id" >&2; return 1; }
   (cd "$(dirname "$javabin")/.." && pwd -P)
 }
 
@@ -256,7 +279,7 @@ EOF
 build_one() {  # id kind os arch
   local id="$1" kind="$2" os="$3" arch="$4" jhome stage zipname
   echo ">>> $id  ($kind  $os/$arch)"
-  jhome="$(fetch_jre "$kind" "$os" "$arch")"
+  jhome="$(fetch_jre "$id")"
   stage="$OUT/.stage/$id"; rm -rf "$stage"; mkdir -p "$stage"
   case "$os" in
     mac)     stage_macos   "$stage" "$jhome" ;;
