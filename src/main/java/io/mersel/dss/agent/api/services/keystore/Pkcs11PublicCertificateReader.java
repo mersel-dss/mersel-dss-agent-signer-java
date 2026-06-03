@@ -35,6 +35,7 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.OptionalLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +101,20 @@ public final class Pkcs11PublicCertificateReader {
    *     kurulamadığında
    */
   public static List<TokenCertificate> read(Path libraryPath) {
+    return read(libraryPath, OptionalLong.empty());
+  }
+
+  /**
+   * {@link #read(Path)} ile aynı; ek olarak {@code onlySlotId} verilirse <b>yalnız o slot'taki</b>
+   * sertifikaları okur. Aynı anda birden çok kart takılıyken (örn. bir okuyucuda NES Bulut, bir
+   * başkasında Mali Mühür) seçilen okuyucunun kartı dışındaki sertifikaların listeye sızmasını
+   * engeller.
+   *
+   * <p>{@code onlySlotId} boşsa veya verilen slotID listede yoksa <b>tüm</b> token-present slot'lar
+   * okunur (eski davranış) — kullanıcının kartını yanlışlıkla gizlememek için güvenli fallback.
+   * Çağıran taraf slot eşlemesini {@link IaikPkcs11Signer#matchSlotIdByTerminal} ile çözer.
+   */
+  public static List<TokenCertificate> read(Path libraryPath, OptionalLong onlySlotId) {
     if (libraryPath == null) {
       throw new IllegalArgumentException("libraryPath null olamaz.");
     }
@@ -118,6 +133,15 @@ public final class Pkcs11PublicCertificateReader {
       return new ArrayList<TokenCertificate>();
     }
 
+    // İstenen slot listede yoksa fallback olarak tüm slotları okuyacağız (kartı gizleme).
+    boolean scope = onlySlotId.isPresent() && contains(slotList, onlySlotId.getAsLong());
+    if (onlySlotId.isPresent() && !scope) {
+      log.debug(
+          "İstenen slotID={} token-present listede yok; tüm slotlar okunacak (lib={}).",
+          onlySlotId.getAsLong(),
+          libraryPath);
+    }
+
     CertificateFactory cf;
     try {
       cf = CertificateFactory.getInstance("X.509");
@@ -128,6 +152,9 @@ public final class Pkcs11PublicCertificateReader {
 
     List<TokenCertificate> result = new ArrayList<TokenCertificate>();
     for (long slotID : slotList) {
+      if (scope && slotID != onlySlotId.getAsLong()) {
+        continue; // seçilen okuyucu/slot dışındaki kartları atla
+      }
       try {
         result.addAll(readSlot(r, p11, slotID, cf));
       } catch (ReflectiveOperationException e) {
@@ -135,6 +162,15 @@ public final class Pkcs11PublicCertificateReader {
       }
     }
     return result;
+  }
+
+  private static boolean contains(long[] arr, long v) {
+    for (long x : arr) {
+      if (x == v) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static List<TokenCertificate> readSlot(

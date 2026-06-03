@@ -96,9 +96,10 @@ class SmartCardPinValidatorTest {
     SmartCardPinValidator v =
         new SmartCardPinValidator(cardManager) {
           @Override
-          Pkcs11Session openSession(Path libraryPath, String pin) {
+          Pkcs11Session openSession(Path libraryPath, String pin, String terminalName) {
             assertThat(libraryPath).isEqualTo(resolvedLib);
             assertThat(pin).isEqualTo("1234");
+            assertThat(terminalName).isEqualTo("ACR39U");
             openCount.incrementAndGet();
             return wrapEmpty();
           }
@@ -121,7 +122,7 @@ class SmartCardPinValidatorTest {
     SmartCardPinValidator v =
         new SmartCardPinValidator(cardManager) {
           @Override
-          Pkcs11Session openSession(Path libraryPath, String pin) {
+          Pkcs11Session openSession(Path libraryPath, String pin, String terminalName) {
             throw new Pkcs11AuthException("PIN doğrulaması başarısız.");
           }
         };

@@ -46,6 +46,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -133,6 +134,15 @@ public final class Pkcs11Session implements AutoCloseable {
    * @throws Pkcs11AuthException PIN doğrulaması başarısız olduğunda
    */
   public static Pkcs11Session open(Path libraryPath, String pin) {
+    return open(libraryPath, pin, null);
+  }
+
+  /**
+   * {@link #open(Path, String)} ile aynı; ek olarak seçilen PC/SC okuyucu adını ({@code
+   * terminalName}) alır. Birden çok token-present slot varsa (iki gerçek kart) SunPKCS11 açıklaması
+   * okuyucu adıyla eşleşen slot'a kilitlenir; aksi halde ilk token-present slot'a düşülür.
+   */
+  public static Pkcs11Session open(Path libraryPath, String pin, String terminalName) {
     if (libraryPath == null) {
       throw new IllegalArgumentException("libraryPath null olamaz.");
     }
@@ -149,9 +159,18 @@ public final class Pkcs11Session implements AutoCloseable {
             + "-"
             + UUID.randomUUID().toString().substring(0, 8);
 
+    // Token-present slot tespiti: birden çok akıllı kart sürücüsü (Aladdin VR, Rainbow iKey
+    // Virtual Reader, ...) kuruluyken C_GetSlotList boş sanal okuyucuları da listeler ve gerçek
+    // kart 0. slot'ta olmayabilir. SunPKCS11'in default slotListIndex=0 davranışı bu durumda boş
+    // okuyucuyu hedefleyip "PKCS11 not found" / NoSuchAlgorithmException verir. Gerçek slot'u
+    // bulup config'e "slot = <id>" yazarak SunPKCS11'i doğru okuyucuya kilitliyoruz. terminalName
+    // verildiyse (iki gerçek kart) okuyucu adıyla eşleşen slot tercih edilir. Best-effort: tespit
+    // edilemezse slot satırı yazılmaz, eski davranışa düşülür.
+    OptionalLong slotId = IaikPkcs11Signer.findTokenPresentSlotId(libraryPath, terminalName);
+
     Path configFile;
     try {
-      configFile = writeConfigFile(name, libraryPath.toString());
+      configFile = writeConfigFile(name, libraryPath.toString(), slotId);
     } catch (IOException e) {
       throw new Pkcs11LibraryException("PKCS#11 config dosyası yazılamadı: " + e.getMessage(), e);
     }
@@ -255,10 +274,17 @@ public final class Pkcs11Session implements AutoCloseable {
   }
 
   /** JDK 1.8'in beklediği PKCS#11 config formatı (file-based; Java 9'da string-based oldu). */
-  private static Path writeConfigFile(String providerName, String libraryPath) throws IOException {
+  private static Path writeConfigFile(String providerName, String libraryPath, OptionalLong slotId)
+      throws IOException {
     StringBuilder sb = new StringBuilder();
     sb.append("name = ").append(providerName).append('\n');
     sb.append("library = ").append(libraryPath).append('\n');
+    // "slot" satırı SunPKCS11'e CK_SLOT_ID verir (slotListIndex değil). Token-present slot
+    // tespit edilebildiyse SunPKCS11'i o slot'a kilitleriz; boş sanal okuyucu slot 0'a düşse
+    // bile gerçek karta gideriz. Tespit yoksa satırı yazmayız (SunPKCS11 default slot 0).
+    if (slotId.isPresent()) {
+      sb.append("slot = ").append(slotId.getAsLong()).append('\n');
+    }
     sb.append("showInfo = false\n");
     Path file = Files.createTempFile("mersel-pkcs11-", ".cfg");
     Files.write(file, sb.toString().getBytes(StandardCharsets.UTF_8));

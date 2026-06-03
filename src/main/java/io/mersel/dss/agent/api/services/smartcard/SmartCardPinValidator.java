@@ -104,7 +104,7 @@ public class SmartCardPinValidator {
         libraryPath,
         cardTypeOverride);
 
-    try (Pkcs11Session session = openSession(libraryPath, pin)) {
+    try (Pkcs11Session session = openSession(libraryPath, pin, terminalName)) {
       log.debug(
           "PIN doğrulama başarılı: terminal={}, provider={}",
           terminalName,
@@ -115,10 +115,11 @@ public class SmartCardPinValidator {
 
   /**
    * Test'in {@link Pkcs11Session#wrapForTest} ile in-memory bir keystore döndürebilmesi için ayrı
-   * tutulmuş factory metod. Production'da {@link Pkcs11Session#open} çağırır.
+   * tutulmuş factory metod. Production'da {@link Pkcs11Session#open(Path, String, String)} çağırır;
+   * {@code terminalName} birden çok gerçek kart varken doğru slot'un seçilmesini sağlar.
    */
-  Pkcs11Session openSession(Path libraryPath, String pin) {
-    return Pkcs11Session.open(libraryPath, pin);
+  Pkcs11Session openSession(Path libraryPath, String pin, String terminalName) {
+    return Pkcs11Session.open(libraryPath, pin, terminalName);
   }
 
   /** Başarılı doğrulamadan dönen küçük value tipi — controller bunu REST yanıtına çevirir. */

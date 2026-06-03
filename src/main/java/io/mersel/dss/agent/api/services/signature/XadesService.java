@@ -47,6 +47,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 import javax.security.auth.login.LoginException;
@@ -331,7 +332,7 @@ public class XadesService {
    */
   byte[] signHrCounterSignatureViaSunPkcs11(
       Path libraryPath, SignDocumentDto dto, SignatureDiagnostics diag) {
-    Pkcs11Session session = Pkcs11Session.open(libraryPath, dto.getPin());
+    Pkcs11Session session = Pkcs11Session.open(libraryPath, dto.getPin(), dto.getTerminalName());
     RuntimeException bodyFailure = null;
     try {
       return signHrWithSession(session, dto, diag);
@@ -482,10 +483,25 @@ public class XadesService {
     // BC'yi pozisyon 1'e kayıt edip SunEC'yi kaldırınca EC parse'ı BC'ye düşer ve sorun çözülür.
     BouncyCastleSetup.ensureRegistered();
 
+    // Token-present slot tespiti — "çok sürücülü firma" patolojisinin XAdES yolundaki karşılığı.
+    // xades4j'in PKCS11KeyStoreKeyingDataProvider'ı slotId verilmezse SunPKCS11 config'ine "slot"
+    // satırı yazmaz; SunPKCS11 default slotListIndex=0'a düşer. Aladdin VR / Rainbow iKey Virtual
+    // Reader gibi boş sanal okuyucular slot 0'ı kapınca keystore load "PKCS11 not found" ile
+    // patlardı. Gerçek kartın slotID'sini bulup ctor'a Integer slotId olarak veriyoruz; xades4j
+    // bunu config'e "slot = <id>" olarak yazar. terminalName verildiyse (iki gerçek kart) okuyucu
+    // adıyla eşleşen slot tercih edilir. Best-effort: tespit yoksa null → eski davranış.
+    OptionalLong xadesSlotId =
+        IaikPkcs11Signer.findTokenPresentSlotId(libraryPath, diag.getTerminalName());
+    Integer slotIdArg =
+        (xadesSlotId.isPresent() && xadesSlotId.getAsLong() <= Integer.MAX_VALUE)
+            ? Integer.valueOf((int) xadesSlotId.getAsLong())
+            : null;
+
     PKCS11KeyStoreKeyingDataProvider keyingProvider =
         new PKCS11KeyStoreKeyingDataProvider(
             libraryPath.toString(),
             providerName,
+            slotIdArg,
             new SigningCertSelectorByIdentifier(certIdentifier),
             new KeyStorePasswordProvider() {
               @Override
@@ -705,7 +721,8 @@ public class XadesService {
     BouncyCastleSetup.ensureRegistered();
     Init.init();
 
-    try (IaikPkcs11Signer signer = IaikPkcs11Signer.open(libraryPath, pin)) {
+    try (IaikPkcs11Signer signer =
+        IaikPkcs11Signer.open(libraryPath, pin, diag.getTerminalName())) {
       IaikPkcs11Signer.NativeSigningKey nativeKey = signer.findSigningKey(certIdentifier);
       X509Certificate signingCert = nativeKey.getCertificate();
       boolean ec = nativeKey.isEc() || isEcdsa(signingCert);
@@ -1229,7 +1246,8 @@ public class XadesService {
     BouncyCastleSetup.ensureRegistered();
     Init.init();
 
-    try (IaikPkcs11Signer signer = IaikPkcs11Signer.open(libraryPath, pin)) {
+    try (IaikPkcs11Signer signer =
+        IaikPkcs11Signer.open(libraryPath, pin, diag.getTerminalName())) {
       IaikPkcs11Signer.NativeSigningKey nativeKey = signer.findSigningKey(certIdentifier);
       X509Certificate signingCert = nativeKey.getCertificate();
       boolean ec = nativeKey.isEc() || isEcdsa(signingCert);

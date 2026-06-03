@@ -6,6 +6,94 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Fixed
+
+- **Birden çok akıllı kart sürücüsü kuruluyken PIN doğrulama ve imzalamanın
+  `503 PKCS11_UNAVAILABLE` ("PKCS11 not found") ile patlaması — SunPKCS11
+  default slot seçimi tuzağı**: bir makinede birden çok PKCS#11 sürücüsü /
+  sanal okuyucu aktifken (örn. Aladdin VR Handler, Rainbow iKey Virtual
+  Reader) doğru kart seçilmesine ve kart listesinde tek kart görünmesine
+  rağmen `/smartcard/pin/validate` ve XAdES imzalama akışları şu hata
+  zinciriyle başarısız oluyordu:
+
+  ```
+  NoSuchAlgorithmException: no such algorithm: PKCS11 for provider SunPKCS11-…
+    └─ KeyStoreException: PKCS11 not found
+        └─ Pkcs11LibraryException: PKCS#11 keystore yüklenemedi: PKCS11 not found
+  ```
+
+  Sürücüler aygıt yöneticisinden devre dışı bırakılınca sorun kayboluyordu.
+
+  **Kök neden**: `SunPKCS11`, config'inde `slot` / `slotListIndex`
+  belirtilmezse default olarak `C_GetSlotList()`'in **0. slot'unu** hedefler.
+  Kartın PKCS#11 kütüphanesi PC/SC üzerinden sistemdeki **tüm okuyucuları**
+  (token takılı olmayan boş sanal okuyucular dahil) enumerate eder. Boş bir
+  sanal okuyucu liste sırasında slot 0'a denk geldiğinde SunPKCS11 token
+  bulamaz, provider hiçbir algoritma register etmez ve
+  `KeyStore.getInstance("PKCS11", provider)` `NoSuchAlgorithmException` atar.
+  Sürücüleri kapatmak phantom okuyucuları listeden düşürdüğü için gerçek kart
+  slot 0'a kayıyor ve akış çalışıyordu.
+
+  **Çözüm**: SunPKCS11'i artık token-present gerçek slot'a kilitliyoruz.
+  `IaikPkcs11Signer#findTokenPresentSlotId` xipki cache'li `PKCS11Module`
+  üzerinden `C_GetSlotList(tokenPresent=true)` ile kartın gerçek `slotID`'sini
+  tespit eder (ek `C_Initialize` maliyeti yok; modül lib başına JVM-ömrü tek
+  instance). Bu değer iki yola da besleniyor:
+
+  | İmza/PIN yolu                | Mekanizma                                            |
+  |------------------------------|------------------------------------------------------|
+  | `Pkcs11Session.open` (PIN + PAdES) | SunPKCS11 config'ine `slot = <id>` satırı yazılır |
+  | `XadesService.doXadesBesSign` (xades4j) | `PKCS11KeyStoreKeyingDataProvider(…, slotId, …)` |
+
+  IAIK native imza yolu (`IaikPkcs11Signer.open`) zaten `getSlotList(true)[0]`
+  kullandığı için bu tuzaktan etkilenmiyordu; üç yol artık aynı kartı seçer.
+  Slot tespiti **best-effort**: native lib yüklenemez / slot okunamazsa eski
+  davranışa (slot satırsız config) düşülür, hiçbir akış devrilmez.
+
+- **Aynı anda iki gerçek kart takılıyken yanlış kartın seçilebilmesi —
+  `terminalName` → slot eşlemesi**: yukarıdaki slot seçimi başlangıçta "ilk
+  token-present slot"u (`getSlotList(true)[0]`) seçiyordu; bu boş okuyuculara
+  karşı yeterli ama aynı kütüphanede **iki gerçek kart** varken kullanıcının
+  arayüzde seçtiği kart yerine enumerate sırasındaki ilk kartı kullanabiliyordu.
+
+  **Çözüm**: `IaikPkcs11Signer.findTokenPresentSlotId` ve `IaikPkcs11Signer.open`
+  artık seçilen PC/SC okuyucu adını (`terminalName`) alır ve birden çok
+  token-present slot varsa `SlotInfo.getSlotDescription()` (PKCS#11 v2.40 §3.2:
+  PC/SC tabanlı kütüphanelerde okuyucu adıdır) ile eşleşen slot'u seçer
+  (normalize: trim + tek boşluk + küçük harf; tam/contains eşleşme). Eşleşme
+  yoksa ilk token-present slot'a düşülür ve **WARN** loglanır. `terminalName`
+  tüm imza/PIN yollarına geçirilir: `Pkcs11Session.open(lib, pin, terminalName)`
+  (PIN doğrulama + PAdES + counter-signature), xades4j `slotId` ve iki IAIK
+  native imza yolu. SoftHSM ile iki tokenlı senaryoda doğrulandı (her okuyucu
+  adı kendi slotID'sine; eşleşmeyen ad ilke düşüyor).
+
+- **Aynı anda iki gerçek kart takılıyken `/smartcard/certificate` listesinde
+  her iki kartın sertifikalarının birden gelmesi — listeleme yolunda slot
+  daraltma eksikliği**: kullanıcı bir okuyucu adı (`terminalName`) gönderip o
+  karttaki sertifikaları beklerken, listeye her iki karttaki sertifikalar
+  birden dönüyordu (örn. bir okuyucuda NES Bulut, bir başkasında Mali Mühür;
+  her ikisi de AKİS/Mali Mühür olduğu için aynı `libakisp11` kütüphanesinden
+  okunuyordu).
+
+  **Kök neden**: PIN'siz public sertifika okuyucusu
+  (`Pkcs11PublicCertificateReader.read`) `C_GetSlotList(tokenPresent=true)`'in
+  döndürdüğü **tüm** token-present slot'ları dolaşıp hepsinin sertifikalarını
+  topluyordu. `terminalName` yalnızca PKCS#11 **kütüphanesini** çözmek için
+  kullanılıyor, slot'u daraltmıyordu; tek kütüphane birden çok okuyucudaki
+  kartları enumerate ettiği için hepsi listeye sızıyordu.
+
+  **Çözüm**: imza/PIN yolundaki aynı slot eşleştirme mantığı listeye de
+  taşındı. `CertificateListingService` artık
+  `IaikPkcs11Signer.matchSlotIdByTerminal(lib, terminalName)` ile seçilen
+  okuyucunun `slotID`'sini (yalnız kesin eşleşmede) çözer ve
+  `Pkcs11PublicCertificateReader.read(lib, OptionalLong)` overload'una geçirir;
+  okuyucu yalnız o slot'u okur. Eşleşme yoksa (`terminalName` boş ya da vendor
+  slot açıklaması okuyucu adıyla uyuşmuyor) **tüm slotlar okunur** — kullanıcının
+  kartını yanlışlıkla gizlememek için güvenli fallback. slotID değeri
+  kütüphane-global (`CK_SLOT_ID`) olduğundan xipki ile tespit edilen değer,
+  reader'ın sun reflection katmanının enumerate ettiği slotID'lerle birebir
+  eşleşir.
+
 ## [1.1.1] — 2026-06-02
 
 ## [1.1.0] — 2026-06-01

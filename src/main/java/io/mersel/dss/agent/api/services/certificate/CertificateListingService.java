@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.OptionalLong;
 
 import javax.security.auth.x500.X500Principal;
 
@@ -53,6 +54,7 @@ import io.mersel.dss.agent.api.models.CertificateResponse;
 import io.mersel.dss.agent.api.models.CertificateStatusResponse;
 import io.mersel.dss.agent.api.models.enums.CertificatePurpose;
 import io.mersel.dss.agent.api.models.enums.TurkishCertificatePolicy;
+import io.mersel.dss.agent.api.services.keystore.IaikPkcs11Signer;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11PublicCertificateReader;
 import io.mersel.dss.agent.api.services.keystore.TokenCertificate;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardManager;
@@ -106,7 +108,18 @@ public class CertificateListingService {
         pkcs11LibraryPath,
         cardType);
 
-    List<TokenCertificate> tokenCerts = Pkcs11PublicCertificateReader.read(libraryPath);
+    // Aynı anda birden çok kart takılıyken seçilen okuyucunun slot'una daralt; eşleşme yoksa
+    // (terminalName boş ya da vendor slot açıklaması okuyucu adıyla uyuşmuyor) tüm slotlar okunur.
+    OptionalLong scopedSlot =
+        IaikPkcs11Signer.matchSlotIdByTerminal(libraryPath, terminalName);
+    if (scopedSlot.isPresent()) {
+      log.info(
+          "Sertifika listeleme terminal='{}' → slotID={} ile sınırlandı.",
+          terminalName,
+          scopedSlot.getAsLong());
+    }
+
+    List<TokenCertificate> tokenCerts = Pkcs11PublicCertificateReader.read(libraryPath, scopedSlot);
     List<X509Certificate> bundle = new ArrayList<X509Certificate>(tokenCerts.size());
     for (TokenCertificate tc : tokenCerts) {
       bundle.add(tc.getCertificate());

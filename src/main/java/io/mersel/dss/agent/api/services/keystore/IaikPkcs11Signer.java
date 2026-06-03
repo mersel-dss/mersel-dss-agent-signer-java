@@ -46,6 +46,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -218,6 +219,17 @@ public final class IaikPkcs11Signer implements AutoCloseable {
    * @throws SmartCardException slot listesinde token yoksa (kart çekilmiş veya okuyucu boş)
    */
   public static IaikPkcs11Signer open(java.nio.file.Path libraryPath, String pin) {
+    return open(libraryPath, pin, null);
+  }
+
+  /**
+   * {@link #open(java.nio.file.Path, String)} ile aynı; ek olarak seçilen PC/SC okuyucu adını
+   * ({@code terminalName}) alır ve aynı kütüphanede birden çok token-present slot varsa açıklaması
+   * okuyucu adıyla eşleşen slot'u seçer (iki gerçek kart senaryosu). Eşleşme yoksa ilk
+   * token-present slot'a düşülür.
+   */
+  public static IaikPkcs11Signer open(
+      java.nio.file.Path libraryPath, String pin, String terminalName) {
     if (libraryPath == null) {
       throw new IllegalArgumentException("libraryPath null olamaz.");
     }
@@ -249,7 +261,7 @@ public final class IaikPkcs11Signer implements AutoCloseable {
     }
 
     char[] pinChars = pin == null ? new char[0] : pin.toCharArray();
-    org.xipki.pkcs11.wrapper.Token tokenObj = slots[0].getToken();
+    org.xipki.pkcs11.wrapper.Token tokenObj = selectSlot(slots, terminalName, libraryPath).getToken();
 
     PKCS11Token p11Token;
     try {
@@ -269,6 +281,207 @@ public final class IaikPkcs11Signer implements AutoCloseable {
       Arrays.fill(pinChars, '\0');
     }
     return new IaikPkcs11Signer(module, p11Token);
+  }
+
+  /**
+   * İçinde <b>token (kart) takılı</b> olan ilk slot'un PKCS#11 {@code slotID}'sini ({@code
+   * CK_SLOT_ID}) döndürür. SunPKCS11 config'ine {@code slot = <id>} satırı yazmak için kullanılır.
+   *
+   * <h3>Neden gerekli — "çok sürücülü firma" patolojisi</h3>
+   *
+   * <p>{@code SunPKCS11}, config'inde {@code slot} / {@code slotListIndex} verilmezse default
+   * olarak {@code C_GetSlotList()}'in <b>0. slot'unu</b> hedefler. Bir makinede birden çok akıllı
+   * kart sürücüsü kuruluyken (Aladdin VR Handler, Rainbow iKey Virtual Reader, ...) bu liste
+   * <b>boş sanal okuyucuları</b> da içerir. Gerçek kart 0. slot'ta değilse SunPKCS11 token bulamaz;
+   * provider hiçbir algoritma register etmez ve {@code KeyStore.getInstance("PKCS11", provider)}
+   * şu hatayı verir:
+   *
+   * <pre>
+   * NoSuchAlgorithmException: no such algorithm: PKCS11 for provider SunPKCS11-...
+   *   └─ KeyStoreException: PKCS11 not found
+   * </pre>
+   *
+   * <p>Bu metod {@code getSlotList(true)} (yalnız token-present slotlar) ile gerçek kartın
+   * slot'unu tespit eder; çağıran SunPKCS11'i o slot'a kilitleyerek phantom okuyuculardan
+   * etkilenmez. {@link #open}'ın izlediği "ilk token-present slot" mantığıyla birebir aynıdır;
+   * iki yol aynı kartı seçer.
+   *
+   * <h3>Maliyet</h3>
+   *
+   * <p>xipki {@link PKCS11Module} lib başına JVM-ömrü tek instance olarak cache'lendiği için (bkz.
+   * {@link #MODULE_CACHE}) bu çağrı ek bir {@code C_Initialize} maliyeti getirmez; modül daha sonra
+   * IAIK native imza yolunda yeniden kullanılır.
+   *
+   * <h3>Hata toleransı</h3>
+   *
+   * <p>Best-effort: native lib yüklenemez ({@code UnsatisfiedLinkError}), modül init edilemez veya
+   * slot okunamazsa boş döner — çağıran eski davranışa (slot satırsız config, yani SunPKCS11
+   * default slot 0) düşer. Bu metod <b>hiçbir zaman</b> imza/PIN akışını devirmez.
+   *
+   * @param libraryPath PKCS#11 kütüphane yolu ({@code null} ise boş döner)
+   * @return token-present ilk slot'un {@code slotID}'si; tespit edilemezse {@link
+   *     OptionalLong#empty()}
+   */
+  public static OptionalLong findTokenPresentSlotId(java.nio.file.Path libraryPath) {
+    return findTokenPresentSlotId(libraryPath, null);
+  }
+
+  /**
+   * {@link #findTokenPresentSlotId(java.nio.file.Path)} ile aynı; ek olarak seçilen PC/SC okuyucu
+   * adını ({@code terminalName}) alır. Aynı kütüphanede birden çok token-present slot varsa (iki
+   * gerçek kart) açıklaması okuyucu adıyla eşleşen slot'un {@code slotID}'sini döndürür; eşleşme
+   * yoksa ilk token-present slot'a düşülür. Böylece hem "boş sanal okuyucu slot 0'ı kapıyor"
+   * (tek kart) hem de "iki gerçek kart" senaryosu doğru kartı seçer.
+   *
+   * @param libraryPath PKCS#11 kütüphane yolu ({@code null} ise boş döner)
+   * @param terminalName kullanıcının seçtiği PC/SC okuyucu adı ({@code null}/boş ise ilk
+   *     token-present slot)
+   * @return seçilen slot'un {@code slotID}'si; tespit edilemezse {@link OptionalLong#empty()}
+   */
+  public static OptionalLong findTokenPresentSlotId(
+      java.nio.file.Path libraryPath, String terminalName) {
+    if (libraryPath == null) {
+      return OptionalLong.empty();
+    }
+    try {
+      ModuleEntry entry = openOrGetModule(libraryPath.toString());
+      Slot[] slots = entry.module.getSlotList(true); // tokenPresent=true → boş okuyucular elenir
+      if (slots == null || slots.length == 0) {
+        log.debug("Token-present slot bulunamadı (lib={}); slot satırsız config'e düşülecek.",
+            libraryPath);
+        return OptionalLong.empty();
+      }
+      long slotId = selectSlot(slots, terminalName, libraryPath).getSlotID();
+      log.debug(
+          "Token-present slot tespit edildi (lib={}): slotID={} ({} aday slot).",
+          libraryPath,
+          slotId,
+          slots.length);
+      return OptionalLong.of(slotId);
+    } catch (Throwable t) {
+      // UnsatisfiedLinkError / PKCS11Exception / IOException dahil her şeyi yut. Slot tespiti
+      // yalnızca SunPKCS11'i doğru okuyucuya yönlendirmek için bir iyileştirmedir; başarısızsa
+      // çağıran slot satırsız config ile (eski davranış) güvenle devam eder.
+      log.debug(
+          "Token-present slot tespiti başarısız (lib={}): {} — slot satırsız config'e düşülecek.",
+          libraryPath,
+          t.getClass().getSimpleName() + ": " + t.getMessage());
+      return OptionalLong.empty();
+    }
+  }
+
+  /**
+   * Token-present slot listesinden imza için kullanılacak slot'u seçer.
+   *
+   * <ul>
+   *   <li>{@code terminalName} verilmemişse veya tek slot varsa → {@code slots[0]} (eski davranış;
+   *       boş sanal okuyucular {@code getSlotList(true)} tarafından zaten elenmiştir).
+   *   <li>{@code terminalName} verilmiş ve birden çok token-present slot varsa (iki gerçek kart) →
+   *       {@code SlotInfo.getSlotDescription()} (PKCS#11 v2.40 §3.2: PC/SC tabanlı kütüphanelerde
+   *       okuyucu adıdır) seçilen okuyucu adıyla eşleşen slot. Eşleşme yoksa {@code slots[0]}'a
+   *       düşülür ve uyarı loglanır (yanlış kart riski operatöre görünür olsun diye).
+   * </ul>
+   */
+  private static Slot selectSlot(Slot[] slots, String terminalName, java.nio.file.Path libForLog) {
+    if (terminalName != null && !terminalName.trim().isEmpty() && slots.length > 1) {
+      Slot matched = matchSlot(slots, terminalName);
+      if (matched != null) {
+        log.info(
+            "terminalName='{}' eşleşen slot seçildi → slotID={} (lib={}).",
+            terminalName,
+            matched.getSlotID(),
+            libForLog);
+        return matched;
+      }
+      log.warn(
+          "terminalName='{}' hiçbir token-present slot açıklamasıyla eşleşmedi; {} aday slot var,"
+              + " ilki seçiliyor (lib={}). İki gerçek kart takılıysa yanlış kart seçilebilir —"
+              + " okuyucu adı ile slot açıklaması uyumunu kontrol edin.",
+          terminalName,
+          slots.length,
+          libForLog);
+    }
+    return slots[0];
+  }
+
+  /**
+   * Verilen kütüphanedeki token-present slot'lar arasından açıklaması ({@code
+   * SlotInfo.getSlotDescription()}, PC/SC okuyucu adı) {@code terminalName} ile eşleşen slot'un
+   * {@code slotID}'sini döndürür. <b>Yalnız kesin eşleşmede</b> dolu döner; {@code terminalName}
+   * boşsa, eşleşme yoksa veya native katman patlarsa {@link OptionalLong#empty()} döner.
+   *
+   * <p>Sertifika listeleme ({@link Pkcs11PublicCertificateReader}) gibi "ya doğru karta daralt ya
+   * da olduğu gibi bırak" semantiği isteyen akışlar için. (İmza yolu eşleşme yoksa ilk
+   * token-present slot'a düşer — bkz. {@link #selectSlot}; listeleme ise eşleşme yoksa tüm
+   * slotları okumaya devam eder, kullanıcının kartını gizlememek için.)
+   */
+  public static OptionalLong matchSlotIdByTerminal(
+      java.nio.file.Path libraryPath, String terminalName) {
+    if (libraryPath == null || terminalName == null || terminalName.trim().isEmpty()) {
+      return OptionalLong.empty();
+    }
+    try {
+      ModuleEntry entry = openOrGetModule(libraryPath.toString());
+      Slot[] slots = entry.module.getSlotList(true);
+      if (slots == null || slots.length == 0) {
+        return OptionalLong.empty();
+      }
+      Slot matched = matchSlot(slots, terminalName);
+      if (matched == null) {
+        log.debug(
+            "matchSlotIdByTerminal: terminalName='{}' hiçbir slot açıklamasıyla eşleşmedi"
+                + " ({} aday slot, lib={}).",
+            terminalName,
+            slots.length,
+            libraryPath);
+        return OptionalLong.empty();
+      }
+      log.debug(
+          "matchSlotIdByTerminal: terminalName='{}' → slotID={} (lib={}).",
+          terminalName,
+          matched.getSlotID(),
+          libraryPath);
+      return OptionalLong.of(matched.getSlotID());
+    } catch (Throwable t) {
+      log.debug(
+          "matchSlotIdByTerminal başarısız (lib={}): {}",
+          libraryPath,
+          t.getClass().getSimpleName() + ": " + t.getMessage());
+      return OptionalLong.empty();
+    }
+  }
+
+  /**
+   * Slot dizisinden açıklaması {@code terminalName} ile eşleşeni bulur (normalize: trim + tek
+   * boşluk + küçük harf; tam/contains iki yönlü). Eşleşme yoksa {@code null}. Loglama yapmaz;
+   * çağıran kendi bağlamına göre info/warn/debug loglar.
+   */
+  private static Slot matchSlot(Slot[] slots, String terminalName) {
+    if (slots == null || terminalName == null || terminalName.trim().isEmpty()) {
+      return null;
+    }
+    String wanted = normalizeReaderName(terminalName);
+    for (Slot slot : slots) {
+      String desc;
+      try {
+        desc = slot.getSlotInfo().getSlotDescription();
+      } catch (Throwable t) {
+        continue; // slot info okunamadı — sıradakine bak
+      }
+      String got = normalizeReaderName(desc);
+      if (!got.isEmpty() && (got.equals(wanted) || got.contains(wanted) || wanted.contains(got))) {
+        return slot;
+      }
+    }
+    return null;
+  }
+
+  /** PC/SC okuyucu adı ↔ slot açıklaması karşılaştırması için normalize (trim + tek boşluk + lc). */
+  private static String normalizeReaderName(String s) {
+    if (s == null) {
+      return "";
+    }
+    return s.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
   }
 
   /**

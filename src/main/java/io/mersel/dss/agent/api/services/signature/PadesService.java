@@ -142,7 +142,8 @@ public class PadesService {
         dto.getCertificateId(),
         Boolean.TRUE.equals(dto.getAppendMode()));
 
-    try (Pkcs11Session session = Pkcs11Session.open(libraryPath, dto.getPin())) {
+    try (Pkcs11Session session =
+        Pkcs11Session.open(libraryPath, dto.getPin(), dto.getTerminalName())) {
       signWithSession(session, dto, signedOut);
     }
   }
