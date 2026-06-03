@@ -57,10 +57,10 @@ public class SignerApplication {
    * varsayılan harici tarama yolları ({@code file:./}, {@code file:./config/}, {@code
    * file:./config/*}{@code /}) bilinçli olarak devre dışı bırakılır: agent, kullanıcı makinesinde
    * çalışan dışa kapalı bir daemon olduğundan çalışma dizinine bırakılan bir {@code application.*}
-   * dosyası ne yapılandırmayı ezebilmeli ne de (örn. DOCTYPE'sız {@code application.xml}) başlangıcı
-   * bozabilmeli. Çalışma zamanı override'ları yine ortam değişkenleri ({@code MERSEL_AGENT_*}) ve
-   * komut satırı argümanlarıyla yapılır; bunlar config-dosyası konumu değil, ayrı property
-   * source'lardır ve bu kısıttan etkilenmez.
+   * dosyası ne yapılandırmayı ezebilmeli ne de (örn. DOCTYPE'sız {@code application.xml})
+   * başlangıcı bozabilmeli. Çalışma zamanı override'ları yine ortam değişkenleri ({@code
+   * MERSEL_AGENT_*}) ve komut satırı argümanlarıyla yapılır; bunlar config-dosyası konumu değil,
+   * ayrı property source'lardır ve bu kısıttan etkilenmez.
    */
   private static final String CONFIG_LOCATION = "optional:classpath:/";
 
