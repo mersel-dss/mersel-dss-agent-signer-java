@@ -39,7 +39,6 @@ import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
 import java.awt.RenderingHints;
-import java.awt.Toolkit;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -246,7 +245,7 @@ public final class MainWindow {
     frame = new JFrame("Mersel DSS Agent Signer");
     frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
     frame.getContentPane().setBackground(BG);
-    frame.setIconImage(loadIconImage());
+    applyWindowIcons(frame);
 
     frame.addWindowListener(
         new WindowAdapter() {
@@ -838,12 +837,28 @@ public final class MainWindow {
     return fallback;
   }
 
-  private static Image loadIconImage() {
+  /**
+   * Pencere (ve Windows/Linux'ta taskbar) ikonunu Mersel logosundan ayarlar. Tek bir görsel yerine
+   * birden çok boyut verilir ({@link JFrame#setIconImages}); işletim sistemi taskbar/başlık/Alt-Tab
+   * için en uygun boyutu seçer ve ikon keskin görünür. macOS'ta Dock ikonu bu çağrıdan değil
+   * başlatıcının {@code -Xdock:icon} argümanından gelir; burada set edilmesi zararsızdır.
+   */
+  private static void applyWindowIcons(JFrame frame) {
     try {
       URL iconUrl = new ClassPathResource("static/assets/icon.png").getURL();
-      return Toolkit.getDefaultToolkit().getImage(iconUrl);
-    } catch (IOException ex) {
-      return null;
+      try (InputStream stream = iconUrl.openStream()) {
+        Image base = ImageIO.read(stream);
+        if (base != null) {
+          java.util.List<Image> icons = new java.util.ArrayList<>();
+          for (int size : new int[] {16, 24, 32, 48, 64, 128, 256}) {
+            icons.add(base.getScaledInstance(size, size, Image.SCALE_SMOOTH));
+          }
+          icons.add(base);
+          frame.setIconImages(icons);
+        }
+      }
+    } catch (IOException | RuntimeException ex) {
+      LOG.debug("Pencere ikonu yüklenemedi: {}", ex.getMessage());
     }
   }
 
