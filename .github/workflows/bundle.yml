@@ -1,0 +1,103 @@
+# Java kurulumu GEREKTİRMEYEN, platform-özel "bundled-JRE" ZIP paketlerini üretir.
+#
+#   - Manuel tetikleme: Actions sekmesi → "Run workflow" (artifact olarak indirilir).
+#   - Release yayınlandığında: ZIP'leri + SHA256SUMS'u o release'e asset olarak ekler.
+#
+# Paketler scripts/package-dist.sh ile üretilir. Script tüm hedefleri tek bir Linux
+# runner'ından kurabildiği için (macOS .app ve Windows .exe dahil) matrix yalnızca
+# paralelleştirme/izolasyon içindir; her hedef bağımsız bir job'da çalışır.
+name: Bundle (JRE-gömülü paketler)
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # release asset upload için
+
+jobs:
+  jar:
+    name: Fat-jar build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+      - name: Build (test atla)
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -ntp -DskipTests package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fat-jar
+          path: target/mersel-dss-agent-signer-api.jar
+          retention-days: 1
+
+  bundle:
+    name: Paketle ${{ matrix.target }}
+    needs: jar
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [windows-x64, windows-x86, macos-x64, macos-arm64, linux-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Fat-jar'ı indir
+        uses: actions/download-artifact@v4
+        with:
+          name: fat-jar
+          path: target
+      - name: Araçlar (zip + Windows .exe için launch4j)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+          curl -fsSL -o /tmp/l4j.tgz \
+            https://downloads.sourceforge.net/project/launch4j/launch4j-3/3.50/launch4j-3.50-linux-x64.tgz
+          mkdir -p /tmp/l4j && tar -xzf /tmp/l4j.tgz -C /tmp/l4j
+          printf '#!/bin/sh\nexec java -jar /tmp/l4j/launch4j/launch4j.jar "$@"\n' > /tmp/launch4j.sh
+          chmod +x /tmp/launch4j.sh
+      - name: Paketle (${{ matrix.target }})
+        env:
+          LAUNCH4J: /tmp/launch4j.sh
+        run: |
+          chmod +x scripts/package-dist.sh
+          scripts/package-dist.sh "${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.target }}
+          path: dist/*.zip
+          retention-days: 7
+
+  release:
+    name: Release asset'leri ekle
+    needs: bundle
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tüm paketleri indir
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS üret
+        run: |
+          cd dist
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Release'e yükle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            dist/*.zip dist/SHA256SUMS.txt \
+            --clobber --repo "${{ github.repository }}"
