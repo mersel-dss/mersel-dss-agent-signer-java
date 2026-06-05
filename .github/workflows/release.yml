@@ -53,6 +53,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
 
     steps:
       - name: Resolve tag
@@ -219,3 +221,19 @@ jobs:
             release-assets/mersel-dss-agent-signer-api-*-bom.json
             release-assets/SHA256SUMS.txt
           fail_on_unmatched_files: true
+
+  # Release yayınlandıktan SONRA platforma özel tek-dosya paketleri üret ve
+  # aynı release'e asset olarak ekle. bundle.yml'i workflow_call ile çağırırız;
+  # böylece release'i bot GITHUB_TOKEN'ı oluştursa bile (ki "bot event'i başka
+  # workflow tetiklemez" kuralı yüzünden release:published kendi başına
+  # bundle'ı tetikleyemez) bundle aynı run zincirinde garanti çalışır.
+  bundles:
+    name: Platform paketleri (.exe/.dmg/.AppImage)
+    needs: release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/bundle.yml
+    with:
+      ref: ${{ needs.release.outputs.tag }}
+      release_tag: ${{ needs.release.outputs.tag }}
+    secrets: inherit

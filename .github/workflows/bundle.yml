@@ -16,7 +16,34 @@
 name: Bundle (JRE-gömülü paketler)
 
 on:
+  # release.yml bu workflow'u tag push → release sonrası çağırır (workflow_call).
+  # Tek run zincirinde çalıştığı için "GITHUB_TOKEN ile üretilen event başka
+  # workflow tetiklemez" kuralına takılmaz ve release ile yarışmaz.
+  workflow_call:
+    inputs:
+      ref:
+        description: "Build edilecek ref (genelde release tag'i)."
+        required: true
+        type: string
+      release_tag:
+        description: "Paketlerin asset olarak yükleneceği release tag'i."
+        required: true
+        type: string
+  # Manuel: artifact üretmek için (release_tag boşsa) veya MEVCUT bir release'e
+  # paket eklemek için (release_tag verilirse).
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Build edilecek ref (tag/branch). Boşsa seçilen branch."
+        required: false
+        type: string
+        default: ""
+      release_tag:
+        description: "Verilirse paketler bu mevcut release'e yüklenir (örn. v1.1.4-rc.1)."
+        required: false
+        type: string
+        default: ""
+  # Bir kullanıcı (bot değil) UI'dan release publish ederse de tetiklenir.
   release:
     types: [published]
 
@@ -29,6 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.release.tag_name || github.ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -70,6 +99,8 @@ jobs:
           - { target: macos-arm64, runner: macos-14 }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.release.tag_name || github.ref }}
       - name: Fat-jar'ı indir
         uses: actions/download-artifact@v4
         with:
@@ -124,8 +155,11 @@ jobs:
   release:
     name: Release asset'leri ekle
     needs: bundle
-    if: github.event_name == 'release'
+    # release event'inde her zaman; call/dispatch'te ise release_tag verildiyse.
+    if: ${{ github.event_name == 'release' || inputs.release_tag != '' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Tüm paketleri indir
         uses: actions/download-artifact@v4
@@ -141,8 +175,10 @@ jobs:
       - name: Release'e yükle
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
         run: |
           shopt -s nullglob
-          gh release upload "${{ github.event.release.tag_name }}" \
+          echo "Yüklenecek release: $RELEASE_TAG"
+          gh release upload "$RELEASE_TAG" \
             dist/*.exe dist/*.dmg dist/*.AppImage dist/*.zip dist/SHA256SUMS.txt \
             --clobber --repo "${{ github.repository }}"
