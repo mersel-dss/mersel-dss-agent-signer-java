@@ -23,11 +23,6 @@
  * işareti, ana pencerenin üst kısmındaki Mersel banner / logo ve
  * altbilgi satırındaki mersel.io credit'i) her dağıtımda korunmasını
  * zorunlu kılar. Detay için LICENSE 2. Madde ve TRADEMARK.md.
- *
- * Bu yazılım IAIK PKCS#11 Wrapper kod tabanından türetilen
- * org.xipki:ipkcs11wrapper kütüphanesini kullanır:
- *   "This product includes software developed by IAIK of Graz University
- *    of Technology."  (IAIK Graz 5-clause BSD attribution requirement)
  */
 package io.mersel.dss.agent.api.services.keystore;
 

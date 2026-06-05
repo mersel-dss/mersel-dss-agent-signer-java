@@ -17,6 +17,12 @@
  * esasıyla, açık ya da örtük HİÇBİR GARANTİ veya KOŞUL OLMAKSIZIN
  * sunulur. Lisans kapsamındaki haklar ve sınırlamalar için Lisans
  * metnine bakınız.
+ *
+ * Mersel Marka Atıf Eki, uygulamanın kullanıcı arayüzünde render
+ * edilen marka atıflarının (splash penceresindeki "MERSEL DSS" marka
+ * işareti, ana pencerenin üst kısmındaki Mersel banner / logo ve
+ * altbilgi satırındaki mersel.io credit'i) her dağıtımda korunmasını
+ * zorunlu kılar. Detay için LICENSE 2. Madde ve TRADEMARK.md.
  */
 package io.mersel.dss.agent.api.config;
 
