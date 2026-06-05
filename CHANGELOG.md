@@ -6,6 +6,37 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Added
+
+- **Platforma özel TEK-DOSYA "tıkla & çalıştır" paketleri** — son kullanıcının
+  makinesinde **Java kurulu olması gerekmez**; her paket kendi gömülü JRE 8'ini
+  taşır. ZIP açıp script çalıştırma adımı kalktı:
+  - **Windows → tek `.exe`** (NSIS self-extracting): kurulum sihirbazı yok;
+    çift tıklayınca kendini geçici dizine açıp gömülü `javaw` ile başlar.
+  - **macOS → `.dmg`** (içinde imzalı `.app`): çift tık → mount → uygulamaya
+    çift tık. İmzasız host'ta ad-hoc "seal" edilir (macOS 14+ "damaged"
+    hatasını önler).
+  - **Linux → tek `.AppImage`**: `chmod +x` → çift tık. AppImage type2
+    runtime + `mksquashfs` ile deterministik üretilir (appimagetool gerekmez).
+- **`linux-arm64` hedefi** — Temurin JRE 8 `aarch64` + AppImage `aarch64`
+  runtime (ikisi de sha256-pinned). ARM Linux (Apple Silicon üzerinde
+  Parallels/UTM, Raspberry Pi vb.) için `.AppImage` üretir.
+- **macOS imza & notarization altyapısı**: `etc/branding/entitlements.plist`
+  (PKCS#11 dinamik kütüphane yüklemesi için `disable-library-validation`
+  dahil). Apple Developer ID secret'ları tanımlıysa CI hardened runtime +
+  notarization + stapling uygular; yoksa ad-hoc imza ile güvenli paket çıkar.
+
+### Changed
+
+- **Dağıtım formatı ZIP → tek-dosya çalıştırılabilirlere geçti.** Gömülü-JRE
+  paketleri artık `.exe` / `.dmg` / `.AppImage`; gerekli araç (makensis /
+  hdiutil / mksquashfs) yoksa güvenli `.zip` fallback'e düşülür.
+- **`bundle.yml` CI workflow'u** platforma özel runner'lara taşındı: macOS
+  `.dmg` için `macos-14` (codesign/notarytool/stapler yalnız macOS'ta çalışır),
+  Windows `.exe` + Linux `.AppImage` için `ubuntu-latest` (apt `nsis` +
+  `squashfs-tools`). Tüm JRE indirme linkleri sha256 ile pinli (deterministik,
+  tekrarlanabilir build).
+
 ## [1.1.3] — 2026-06-03
 
 ### Changed
