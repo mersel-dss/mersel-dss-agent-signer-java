@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 ###############################################################################
-# package-dist.sh — Bundled-JRE dağıtım paketleri üretir.
+# package-dist.sh — Bundled-JRE, platforma özel TEK-DOSYA "tıkla & çalıştır"
+# paketleri üretir (ZIP değil):
 #
-# Her hedef için (Windows x64/x86, macOS arm64/x64, Linux x64) bir ZIP üretir.
-# ZIP'in kökünde SADECE çift-tıklanacak başlatıcı bulunur; çalıştırılabilir
-# `.jar` `app/` alt klasöründe gizlidir, böylece kullanıcı yanlışlıkla jar'a
-# tıklayıp sistemdeki (uyumsuz olabilecek) Java ile açmaz. Gömülü JRE her
-# zaman `runtime/` altındadır ve başlatıcı doğrudan onu kullanır.
+#     Windows x64/x86  →  tek .exe   (NSIS self-extracting; kurulum YOK,
+#                                     çalışınca geçici klasöre açılıp gömülü
+#                                     javaw ile başlar)
+#     macOS x64/arm64  →  .dmg       (içinde imzalı/notarize .app; çift tık →
+#                                     mount → uygulamaya çift tık)
+#     Linux x64/arm64  →  .AppImage  (tek dosya; chmod +x → çift tık)
+#
+# Çalıştırılabilir `.jar` her pakette gizlidir; gömülü JRE her zaman kullanılır,
+# son kullanıcının makinesinde ayrı Java GEREKMEZ.
 #
 #   runtime kaynağı:
 #     - 4 hedef: Eclipse Temurin (Adoptium) JRE 8
 #     - macOS arm64: Azul Zulu JRE 8 (Temurin Java 8 arm64 üretmiyor)
+#
+# Gerekli araçlar (yoksa o hedef güvenli .zip fallback'e düşer):
+#     Windows → makensis (NSIS)   |  Linux → mksquashfs (squashfs-tools)
+#     macOS   → hdiutil (yerleşik) + codesign/notarytool (imza/notarization)
 #
 # Kullanım:
 #   scripts/package-dist.sh                 # tüm hedefler
@@ -20,8 +29,18 @@
 #   JAR=...        (vars. target/mersel-dss-agent-signer-api.jar)
 #   VERSION=...    (vars. jar manifest Implementation-Version)
 #   OUT=dist       çıktı dizini
-#   CACHE=...      JRE indirme önbelleği (vars. .tooling/jre-cache)
-#   LAUNCH4J=...   launch4j CLI yolu (varsa Windows için gerçek .exe üretir)
+#   CACHE=...      JRE/runtime indirme önbelleği (vars. .tooling/jre-cache)
+#
+# macOS imzalama / notarization (yalnız macOS host'ta etkilidir; codesign yoksa
+# imzasız .app üretilir, codesign varsa kimliksizken ad-hoc "seal" edilir):
+#   APPLE_SIGNING_IDENTITY=...  "Developer ID Application: Ad (TEAMID)" → gerçek
+#                               imza + hardened runtime + entitlements. Boşsa
+#                               ad-hoc (codesign --sign -) ile bundle mühürlenir
+#                               (macOS 14+ "damaged" hatasını önler).
+#   APPLE_ID / APPLE_TEAM_ID / APPLE_PASSWORD  → üçü de doluysa imzalı .app
+#                               notarytool ile notarize edilip stapler'lanır.
+#                               (APPLE_PASSWORD = app-specific password.)
+#   NOTARY_PROFILE=...          alternatif: notarytool keychain profili adı.
 ###############################################################################
 set -euo pipefail
 
@@ -36,6 +55,7 @@ BUNDLE_ID="io.mersel.dss.agent"
 ICON_ICNS="etc/branding/app.icns"
 ICON_ICO="etc/branding/app.ico"
 ICON_PNG="etc/branding/app.png"
+ENTITLEMENTS="etc/branding/entitlements.plist"
 
 JAR="${JAR:-target/mersel-dss-agent-signer-api.jar}"
 OUT="${OUT:-dist}"
@@ -55,6 +75,7 @@ TARGETS_ALL=(
   "macos-x64|temurin|mac|x64"
   "macos-arm64|zulu|mac|aarch64"
   "linux-x64|temurin|linux|x64"
+  "linux-arm64|temurin|linux|aarch64"
 )
 
 if [ "$#" -gt 0 ]; then SELECTED=("$@"); else
@@ -62,6 +83,7 @@ if [ "$#" -gt 0 ]; then SELECTED=("$@"); else
 fi
 
 mkdir -p "$OUT" "$CACHE"
+OUT="$(cd "$OUT" && pwd)"   # mutlak yap (relative/absolute fark etmesin)
 
 # ---- yardımcılar ----
 copy_tree() { tar -C "$1" -cf - . | tar -C "$2" -xf - ; }   # symlink/perm korur
@@ -80,6 +102,7 @@ jre_pin() {  # target_id -> "URL|SHA256"
     macos-x64)   echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u492-b09/OpenJDK8U-jre_x64_mac_hotspot_8u492b09.tar.gz|e4acfc82781f0a4ec1fb9785afee41dcb4bb444655d445a2b31edbacbe6bf040";;
     macos-arm64) echo "https://cdn.azul.com/zulu/bin/zulu8.94.0.17-ca-jre8.0.492-macosx_aarch64.tar.gz|1042604675870d658da6fdf74160f095cae68c37d042e98a33a2462b89ad4108";;
     linux-x64)   echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u492-b09/OpenJDK8U-jre_x64_linux_hotspot_8u492b09.tar.gz|8eef3d4a837bb7a9e45d30a7579d84d5b76a4321f4376573311e6bf89e48f9b0";;
+    linux-arm64) echo "https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u492-b09/OpenJDK8U-jre_aarch64_linux_hotspot_8u492b09.tar.gz|d5e50cb002600007dbdfac523605d26196607fa5212db0942ef05cdce9fe2892";;
     *) return 1;;
   esac
 }
@@ -147,9 +170,36 @@ Lisans: LICENSE ve NOTICE dosyalarına bakınız.
 EOF
 }
 
-stage_macos() {  # stage jhome
-  local stage="$1" jhome="$2" app C
-  app="$stage/${LAUNCHER_BASE}.app"; C="$app/Contents"
+# Pinned AppImage type2 runtime (Linux tek-dosya .AppImage başlığı). Sürümlü değil
+# (continuous) olduğundan SHA ile sabitlenir; değişirse buradan güncelle.
+APPIMAGE_RT_X64_URL="https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64"
+APPIMAGE_RT_X64_SHA="a2419dce47568395ae79c01ffa9a5a341dd339581352ff104d073527543177e5"
+APPIMAGE_RT_ARM64_URL="https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-aarch64"
+APPIMAGE_RT_ARM64_SHA="7f27a8c15bf20a2e46342ea4a977047a69d8b4d64a123fe0b5e23b20fd290c85"
+
+dl_verify() {  # url sha out
+  local url="$1" sha="$2" out="$3" got
+  curl -fsSL "$url" -o "$out"
+  got="$(sha256_of "$out")"
+  [ "$got" = "$sha" ] || {
+    echo "HATA: SHA-256 uyuşmadı: $url" >&2
+    echo "      beklenen: $sha" >&2; echo "      gelen   : $got" >&2
+    rm -f "$out"; return 1; }
+}
+
+# Tek-dosya üretilemediğinde (gerekli araç yok) güvenli ZIP fallback.
+fallback_zip() {  # dir id
+  local dir="$1" id="$2" name
+  name="mersel-dss-agent-signer-${VERSION}-${id}.zip"
+  rm -f "$OUT/$name"
+  ( cd "$dir" && zip -ry -q "$OUT/$name" . )
+  ARTIFACT="$OUT/$name"
+}
+
+# ============================ macOS → .dmg ===================================
+# .app bundle'ı kurar (gömülü JRE + Dock ikonu + launcher).
+build_mac_app() {  # appdir jhome
+  local app="$1" jhome="$2" C="$1/Contents"
   mkdir -p "$C/MacOS" "$C/Resources" "$C/app" "$C/runtime"
   copy_tree "$jhome" "$C/runtime"
   cp "$JAR" "$C/app/$JAR_IN_BUNDLE"
@@ -176,121 +226,186 @@ EOF
   <key>LSMinimumSystemVersion</key><string>10.9</string>
 </dict></plist>
 EOF
-  write_readme "$stage" mac
-  cp LICENSE NOTICE "$stage"/ 2>/dev/null || true
 }
 
-stage_windows() {  # stage jhome arch
-  local stage="$1" jhome="$2" arch="$3"
-  mkdir -p "$stage/app" "$stage/runtime"
-  copy_tree "$jhome" "$stage/runtime"
-  cp "$JAR" "$stage/app/$JAR_IN_BUNDLE"
-  if [ -n "${LAUNCH4J:-}" ] && [ -f "$ICON_ICO" ] && build_win_exe "$stage" "$arch"; then
-    :   # Mersel ikonlu gerçek .exe üretildi (taskbar ikonu ayrıca uygulama-içi setIconImages ile)
+# .app içindeki tüm mach-o'ları + bundle'ı imzalar (Developer ID varsa hardened
+# runtime + entitlements; yoksa ad-hoc "seal" → macOS 14+ "damaged" hatasını önler).
+sign_macos_app() {  # app
+  local app="$1" id ents
+  command -v codesign >/dev/null 2>&1 || {
+    echo "    (codesign yok → macOS dışı host; .app imzasız)" >&2; return 0; }
+  id="${APPLE_SIGNING_IDENTITY:-}"
+  ents="$ROOT/$ENTITLEMENTS"
+  if [ -n "$id" ]; then
+    echo "    codesign (Developer ID): $id" >&2
+    while IFS= read -r f; do
+      file "$f" 2>/dev/null | grep -q 'Mach-O' || continue
+      case "$f" in
+        */runtime/bin/*) codesign --force --options runtime --timestamp \
+                           --entitlements "$ents" --sign "$id" "$f" >/dev/null ;;
+        *)               codesign --force --options runtime --timestamp \
+                           --sign "$id" "$f" >/dev/null ;;
+      esac
+    done < <(find "$app/Contents/runtime" -type f)
+    codesign --force --options runtime --timestamp --entitlements "$ents" \
+      --sign "$id" "$app" >/dev/null
+    codesign --verify --deep --strict --verbose=2 "$app"
   else
-    [ -n "${LAUNCH4J:-}" ] || echo "    (launch4j yok → .cmd fallback başlatıcı)" >&2
-    cat > "$stage/${LAUNCHER_BASE}.cmd" <<EOF
+    echo "    codesign (ad-hoc; gerçek imza için APPLE_SIGNING_IDENTITY ver)" >&2
+    codesign --force --deep --sign - "$app" >/dev/null
+  fi
+}
+
+# Verilen dosyayı (.dmg) Apple'a notarize ettirip ticket'ı staple eder.
+# Kimlik/credential yoksa atlanır (imzalı .app yine "sağ tık → Aç" ile çalışır).
+notarize_macos() {  # file
+  local f="$1"
+  [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || return 0
+  command -v xcrun >/dev/null 2>&1 || return 0
+  if [ -n "${NOTARY_PROFILE:-}" ]; then
+    echo "    notarytool submit (profile: $NOTARY_PROFILE)…" >&2
+    xcrun notarytool submit "$f" --keychain-profile "$NOTARY_PROFILE" --wait
+  elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ]; then
+    echo "    notarytool submit (apple-id: $APPLE_ID)…" >&2
+    xcrun notarytool submit "$f" \
+      --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" --wait
+  else
+    echo "    (notarization atlandı: APPLE_ID/TEAM_ID/PASSWORD ya da NOTARY_PROFILE yok)" >&2
+    return 0
+  fi
+  xcrun stapler staple "$f"
+}
+
+make_macos() {  # stage jhome id
+  local stage="$1" jhome="$2" id="$3" app dmgsrc name
+  app="$stage/${LAUNCHER_BASE}.app"
+  build_mac_app "$app" "$jhome"
+  sign_macos_app "$app"
+  name="mersel-dss-agent-signer-${VERSION}-${id}.dmg"
+  if command -v hdiutil >/dev/null 2>&1; then
+    dmgsrc="$stage/dmgsrc"; mkdir -p "$dmgsrc"
+    cp -R "$app" "$dmgsrc/"
+    ln -s /Applications "$dmgsrc/Applications"      # sürükle-bırak kurulum (opsiyonel)
+    write_readme "$dmgsrc" mac
+    cp LICENSE NOTICE "$dmgsrc"/ 2>/dev/null || true
+    rm -f "$OUT/$name"
+    hdiutil create -volname "$APP_NAME" -srcfolder "$dmgsrc" -ov -format UDZO -quiet "$OUT/$name"
+    if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && command -v codesign >/dev/null 2>&1; then
+      codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$OUT/$name" >/dev/null
+    fi
+    notarize_macos "$OUT/$name"
+    ARTIFACT="$OUT/$name"
+  else
+    echo "    (hdiutil yok → .dmg yerine .zip fallback; .app içeride)" >&2
+    local zdir="$stage/zip"; mkdir -p "$zdir"; cp -R "$app" "$zdir/"
+    write_readme "$zdir" mac; cp LICENSE NOTICE "$zdir"/ 2>/dev/null || true
+    fallback_zip "$zdir" "$id"
+  fi
+}
+
+# ============================ Windows → tek .exe =============================
+# NSIS ile, kurulum YAPMAYAN, çalışınca kendini geçici klasöre açıp gömülü
+# javaw ile uygulamayı başlatan tek self-extracting .exe üretir.
+write_nsi() {  # nsifile payloaddir outexe
+  local nsi="$1" payload="$2" outexe="$3"
+  cat > "$nsi" <<EOF
+Unicode true
+Name "${APP_NAME}"
+OutFile "${outexe}"
+Icon "${ROOT}/${ICON_ICO}"
+SilentInstall silent
+RequestExecutionLevel user
+Section
+  InitPluginsDir
+  SetOutPath "\$PLUGINSDIR"
+  File /r "${payload}/*"
+  ExecWait '"\$PLUGINSDIR\\runtime\\bin\\javaw.exe" -jar "\$PLUGINSDIR\\app\\${JAR_IN_BUNDLE}"'
+SectionEnd
+EOF
+}
+
+make_windows() {  # stage jhome arch id
+  local stage="$1" jhome="$2" arch="$3" id="$4" payload name nsi
+  payload="$stage/payload"; mkdir -p "$payload/app" "$payload/runtime"
+  copy_tree "$jhome" "$payload/runtime"
+  cp "$JAR" "$payload/app/$JAR_IN_BUNDLE"
+  name="mersel-dss-agent-signer-${VERSION}-${id}.exe"
+  if command -v makensis >/dev/null 2>&1 && [ -f "$ICON_ICO" ]; then
+    nsi="$stage/app.nsi"; write_nsi "$nsi" "$payload" "$OUT/$name"
+    rm -f "$OUT/$name"
+    makensis -V2 "$nsi" >/dev/null
+    ARTIFACT="$OUT/$name"
+  else
+    echo "    (makensis yok → tek .exe yerine .zip fallback + .cmd başlatıcı)" >&2
+    cat > "$payload/${LAUNCHER_BASE}.cmd" <<EOF
 @echo off
-rem ${APP_NAME} başlatıcı — gömülü JRE ile çalıştırır (sistem Java'sını kullanmaz)
 start "" "%~dp0runtime\\bin\\javaw.exe" -jar "%~dp0app\\${JAR_IN_BUNDLE}" %*
 EOF
+    write_readme "$payload" windows; cp LICENSE NOTICE "$payload"/ 2>/dev/null || true
+    fallback_zip "$payload" "$id"
   fi
-  write_readme "$stage" windows
-  cp LICENSE NOTICE "$stage"/ 2>/dev/null || true
 }
 
-build_win_exe() {  # stage arch -> 0 başarı / 1 başarısız (LAUNCH4J set + app.ico gerekli)
-  local stage="$1" arch="$2" cfg bits b64 stage_abs ico_abs
-  stage_abs="$(cd "$stage" && pwd)"          # launch4j relative yolları config'e göre çözer → mutlak ver
-  ico_abs="$ROOT/$ICON_ICO"
-  if [ "$arch" = x64 ]; then bits=64; b64=true; else bits=32; b64=false; fi
-  cfg="$(mktemp).xml"
-  # <jar> ve <jre><path> RUNTIME yolları (Windows'ta exe'ye göre) → relative kalır.
-  cat > "$cfg" <<EOF
-<launch4jConfig>
-  <dontWrapJar>true</dontWrapJar>
-  <headerType>gui</headerType>
-  <jar>app\\${JAR_IN_BUNDLE}</jar>
-  <outfile>${stage_abs}/${LAUNCHER_BASE}.exe</outfile>
-  <chdir>.</chdir>
-  <errTitle>${APP_NAME}</errTitle>
-  <icon>${ico_abs}</icon>
-  <jre>
-    <path>runtime</path>
-    <bundledJre64Bit>${b64}</bundledJre64Bit>
-    <runtimeBits>${bits}</runtimeBits>
-  </jre>
-</launch4jConfig>
-EOF
-  if "$LAUNCH4J" "$cfg" >/dev/null 2>&1; then rm -f "$cfg"; return 0; fi
-  rm -f "$cfg"; return 1
-}
-
-stage_linux() {  # stage jhome
-  local stage="$1" jhome="$2"
-  mkdir -p "$stage/app" "$stage/runtime"
-  copy_tree "$jhome" "$stage/runtime"
-  cp "$JAR" "$stage/app/$JAR_IN_BUNDLE"
-  cp "$ICON_PNG" "$stage/Mersel-DSS-Agent.png"   # görünür Mersel ikonu (install.sh kullanır)
-  # Doğrudan başlatıcı (çift tık / terminalden çalıştır)
-  cat > "$stage/${LAUNCHER_SH}" <<EOF
+# ============================ Linux → tek .AppImage ==========================
+# AppImage = [type2 runtime ELF] + [AppDir'in squashfs'i]. appimagetool'u
+# çalıştırmaya gerek yok; mksquashfs + cat ile birleştirilir (deterministik).
+make_linux() {  # stage jhome arch id
+  local stage="$1" jhome="$2" arch="$3" id="$4" ad name rt rturl rtsha
+  ad="$stage/AppDir"; mkdir -p "$ad/app" "$ad/runtime"
+  copy_tree "$jhome" "$ad/runtime"
+  cp "$JAR" "$ad/app/$JAR_IN_BUNDLE"
+  cp "$ICON_PNG" "$ad/mersel-dss-agent.png"
+  cat > "$ad/AppRun" <<EOF
 #!/bin/sh
-# ${APP_NAME} başlatıcı — gömülü JRE ile çalıştırır (sistem Java'sını kullanmaz)
-DIR="\$(cd "\$(dirname "\$0")" && pwd)"
-exec "\$DIR/runtime/bin/java" -jar "\$DIR/app/${JAR_IN_BUNDLE}" "\$@"
+HERE="\$(dirname "\$(readlink -f "\$0")")"
+exec "\$HERE/runtime/bin/java" -jar "\$HERE/app/${JAR_IN_BUNDLE}" "\$@"
 EOF
-  chmod +x "$stage/${LAUNCHER_SH}"
-  # Menüye ekleme: .desktop'ı MUTLAK yollarla kurar → menüde Mersel adı + Mersel ikonu görünür.
-  # (Taşınabilir bir klasörde .desktop'ın Icon= alanı mutlak yol gerektirdiğinden, gömülü gevşek
-  #  .desktop yerine bu yöntem kullanılır; kurulum yapılmadan da çalışan pencere ikonu zaten
-  #  uygulama içi setIconImages ile Mersel'dir.)
-  cat > "$stage/install.sh" <<EOF
-#!/bin/sh
-# ${APP_NAME}'ı uygulama menüsüne ekler (Mersel ikonuyla). Kaldırmak için en alttaki komut.
-DIR="\$(cd "\$(dirname "\$0")" && pwd)"
-APPS="\$HOME/.local/share/applications"
-mkdir -p "\$APPS"
-chmod +x "\$DIR/${LAUNCHER_SH}"
-cat > "\$APPS/mersel-dss-agent.desktop" <<DESK
+  chmod +x "$ad/AppRun"
+  cat > "$ad/mersel-dss-agent.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=${APP_NAME}
 Comment=Yerel PKCS#11 imzalama agent'ı
-Exec="\$DIR/${LAUNCHER_SH}"
-Icon=\$DIR/Mersel-DSS-Agent.png
+Exec=AppRun
+Icon=mersel-dss-agent
 Terminal=false
 Categories=Utility;Security;
-DESK
-update-desktop-database "\$APPS" 2>/dev/null || true
-echo "Eklendi: menüde 'Mersel DSS Agent Signer' (Mersel ikonuyla)."
-echo "Kaldırmak icin: rm \"\$APPS/mersel-dss-agent.desktop\""
 EOF
-  chmod +x "$stage/install.sh"
-  write_readme "$stage" linux
-  cat >> "$stage/OKUBENI.txt" <<EOF
-
-UYGULAMA MENÜSÜNE EKLEME (opsiyonel)
-  ./install.sh  →  başlat menüsüne "Mersel DSS Agent Signer" girişini
-  Mersel ikonuyla ekler. (Çalışan uygulamanın taskbar ikonu zaten Mersel'dir.)
-EOF
-  cp LICENSE NOTICE "$stage"/ 2>/dev/null || true
+  name="mersel-dss-agent-signer-${VERSION}-${id}.AppImage"
+  case "$arch" in
+    x64)     rturl="$APPIMAGE_RT_X64_URL";   rtsha="$APPIMAGE_RT_X64_SHA";;
+    aarch64) rturl="$APPIMAGE_RT_ARM64_URL"; rtsha="$APPIMAGE_RT_ARM64_SHA";;
+    *)       rturl="";;
+  esac
+  if command -v mksquashfs >/dev/null 2>&1 && [ -n "$rturl" ]; then
+    rt="$CACHE/appimage-runtime-${arch}"
+    [ -f "$rt" ] || dl_verify "$rturl" "$rtsha" "$rt"
+    mksquashfs "$ad" "$stage/app.sqfs" -root-owned -noappend -quiet
+    cat "$rt" "$stage/app.sqfs" > "$OUT/$name"
+    chmod +x "$OUT/$name"
+    ARTIFACT="$OUT/$name"
+  else
+    echo "    (mksquashfs/runtime yok → .AppImage yerine .zip fallback)" >&2
+    cp "$ICON_PNG" "$ad/Mersel-DSS-Agent.png"
+    write_readme "$ad" linux; cp LICENSE NOTICE "$ad"/ 2>/dev/null || true
+    fallback_zip "$ad" "$id"
+  fi
 }
 
 build_one() {  # id kind os arch
-  local id="$1" kind="$2" os="$3" arch="$4" jhome stage zipname
+  local id="$1" kind="$2" os="$3" arch="$4" jhome stage
   echo ">>> $id  ($kind  $os/$arch)"
   jhome="$(fetch_jre "$id")"
   stage="$OUT/.stage/$id"; rm -rf "$stage"; mkdir -p "$stage"
+  ARTIFACT=""
   case "$os" in
-    mac)     stage_macos   "$stage" "$jhome" ;;
-    windows) stage_windows "$stage" "$jhome" "$arch" ;;
-    linux)   stage_linux   "$stage" "$jhome" ;;
+    mac)     make_macos   "$stage" "$jhome" "$id" ;;
+    windows) make_windows "$stage" "$jhome" "$arch" "$id" ;;
+    linux)   make_linux   "$stage" "$jhome" "$arch" "$id" ;;
   esac
-  zipname="mersel-dss-agent-signer-${VERSION}-${id}.zip"
-  rm -f "$OUT/$zipname"
-  ( cd "$stage" && zip -ry -q "$ROOT/$OUT/$zipname" . )
-  ( cd "$OUT" && shasum -a 256 "$zipname" >> SHA256SUMS.txt )
-  echo "    -> $OUT/$zipname  ($(du -h "$OUT/$zipname" | cut -f1))"
+  [ -n "$ARTIFACT" ] && [ -f "$ARTIFACT" ] || { echo "HATA: artifact üretilemedi ($id)" >&2; return 1; }
+  printf '%s  %s\n' "$(sha256_of "$ARTIFACT")" "$(basename "$ARTIFACT")" >> "$OUT/SHA256SUMS.txt"
+  echo "    -> $ARTIFACT  ($(du -h "$ARTIFACT" | cut -f1))"
 }
 
 # ---- ana akış ----
@@ -312,5 +427,5 @@ done
 rm -rf "$OUT/.stage"
 echo
 echo "=== Tamamlandı ==="
-ls -lh "$OUT"/*.zip 2>/dev/null || true
+ls -lh "$OUT"/*.exe "$OUT"/*.dmg "$OUT"/*.AppImage "$OUT"/*.zip 2>/dev/null || true
 echo "--- SHA256SUMS.txt ---"; cat "$OUT/SHA256SUMS.txt"

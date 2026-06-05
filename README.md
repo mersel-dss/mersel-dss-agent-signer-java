@@ -43,24 +43,25 @@ adrese HTTP istekleri atarak:
 
 İki dağıtım biçimi vardır:
 
-**1) Bundled-JRE paketi — Java kurulumu GEREKMEZ (önerilir).** İşletim
-sistemine uygun ZIP'i indir, aç ve klasörün kökündeki başlatıcıya çift
-tıkla. Gerekli Java çalışma ortamı (JRE) paketin içindedir; makinede Java
-kurulu olmasına gerek yoktur.
+**1) Tek-dosya "tıkla & çalıştır" paketi — Java kurulumu GEREKMEZ (önerilir).**
+İşletim sistemine uygun tek dosyayı indir, çift tıkla. Gerekli Java çalışma
+ortamı (JRE) dosyanın içindedir; makinede Java kurulu olmasına gerek yoktur,
+kurulum/setup adımı da yoktur.
 
-| Platform | Paket | Kökteki başlatıcı |
+| Platform | İndirilen tek dosya | Nasıl çalıştırılır |
 |---|---|---|
-| Windows x64 / x86 | `…-windows-x64.zip` / `…-windows-x86.zip` | `Mersel DSS Agent.exe` |
-| macOS (Apple Silicon) | `…-macos-arm64.zip` | `Mersel DSS Agent.app` |
-| macOS (Intel) | `…-macos-x64.zip` | `Mersel DSS Agent.app` |
-| Linux x64 | `…-linux-x64.zip` | `Mersel-DSS-Agent.sh` |
+| Windows x64 / x86 | `…-windows-x64.exe` / `…-windows-x86.exe` | Çift tık (kendini açıp başlar) |
+| macOS (Apple Silicon) | `…-macos-arm64.dmg` | Çift tık → mount → `Mersel DSS Agent.app`'e çift tık |
+| macOS (Intel) | `…-macos-x64.dmg` | Çift tık → mount → `Mersel DSS Agent.app`'e çift tık |
+| Linux x64 | `…-linux-x64.AppImage` | Çalıştırılabilir işaretle → çift tık |
 
-Çalıştırılabilir `.jar`, paketin `app/` alt klasöründe gizlidir; kullanıcı
-her zaman kökteki başlatıcıyı kullanır — bu, jar'a yanlışlıkla çift tıklayıp
-sistemdeki (uyumsuz olabilecek) Java ile açma riskini ortadan kaldırır.
-Başlatıcı her zaman paketteki gömülü JRE'yi kullanır. Paketler
+Çalıştırılabilir `.jar` her dosyanın içinde gizlidir; başlatıcı her zaman gömülü
+JRE'yi kullanır — bu, jar'a yanlışlıkla çift tıklayıp sistemdeki (uyumsuz
+olabilecek) Java ile açma riskini ortadan kaldırır. Paketler
 `scripts/package-dist.sh` ile üretilir (Temurin JRE 8; macOS arm64 için Azul
-Zulu JRE 8 — Temurin'in Java 8 aarch64 macOS build'i yoktur).
+Zulu JRE 8 — Temurin'in Java 8 aarch64 macOS build'i yoktur). Windows `.exe`
+NSIS self-extractor'dır; macOS `.dmg` imzalı/notarize `.app` içerir; Linux
+`.AppImage` tek taşınabilir dosyadır.
 
 **2) Tek jar — Java 8 kuruluysa.** Makinede Java 8 kuruluysa `.jar`
 dosyasına çift tıklamak da yeterlidir; macOS Finder, Linux file manager
@@ -82,9 +83,8 @@ Terminal alternatifi (CI / sunucu / Docker için):
 java -jar mersel-dss-agent-signer-api-X.Y.Z.jar
 ```
 
-> **Önkoşul (yalnızca jar için):** Java 8+ kurulu olmalı. Bundled-JRE
-> paketleri (1. seçenek) bu önkoşulu ortadan kaldırır. Native installer
-> (`.msi` / `.pkg` / `.deb` / `.rpm`) ise hâlâ yol haritasındadır.
+> **Önkoşul (yalnızca jar için):** Java 8+ kurulu olmalı. Tek-dosya paketleri
+> (1. seçenek) bu önkoşulu ortadan kaldırır.
 
 ### 3 adımda imza akışı
 
@@ -620,8 +620,9 @@ Güvenlik açığı bildirmek için: [SECURITY.md](SECURITY.md).
       validation
 - [ ] CAdES desteği (e-İrsaliye / e-Reçete varyantları için)
 - [ ] PKCS#11 session pooling
-- [x] Taşınabilir bundled-JRE paketleri (platform-özel ZIP; Temurin/Zulu
-      JRE 8 gömülü, Java kurulumu gerektirmez) — `scripts/package-dist.sh`
+- [x] Platforma özel tek-dosya "tıkla & çalıştır" paketleri (Windows `.exe`,
+      macOS `.dmg`, Linux `.AppImage`; Temurin/Zulu JRE 8 gömülü, Java kurulumu
+      gerektirmez) — `scripts/package-dist.sh`
 - [ ] JDK 17+ hattı (reflection'sız PKCS#11) — bu kalemle birlikte native
       installer'lar (jpackage MSI / PKG / DEB) da açılır
 - [ ] CSRF guard (`X-Requested-By` header zorunluluğu) + per-terminal

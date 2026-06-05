@@ -1,11 +1,18 @@
-# Java kurulumu GEREKTİRMEYEN, platform-özel "bundled-JRE" ZIP paketlerini üretir.
+# Java kurulumu GEREKTİRMEYEN, platforma özel TEK-DOSYA "tıkla & çalıştır"
+# paketleri üretir: Windows → .exe, macOS → .dmg, Linux → .AppImage.
 #
 #   - Manuel tetikleme: Actions sekmesi → "Run workflow" (artifact olarak indirilir).
-#   - Release yayınlandığında: ZIP'leri + SHA256SUMS'u o release'e asset olarak ekler.
+#   - Release yayınlandığında: dosyaları + SHA256SUMS'u o release'e asset olarak ekler.
 #
-# Paketler scripts/package-dist.sh ile üretilir. Script tüm hedefleri tek bir Linux
-# runner'ından kurabildiği için (macOS .app ve Windows .exe dahil) matrix yalnızca
-# paralelleştirme/izolasyon içindir; her hedef bağımsız bir job'da çalışır.
+# Paketler scripts/package-dist.sh ile üretilir. Windows (.exe, NSIS) ve Linux
+# (.AppImage, mksquashfs) hedefleri Linux runner'ında üretilir; macOS (.dmg)
+# codesign/notarytool/stapler için macOS runner'ında çalışır.
+#
+# macOS imzalama runhq desenini izler: aşağıdaki 6 secret doluysa Developer ID
+# + hardened runtime + entitlements ile imzalanıp notarize edilir; secret yoksa
+# script ad-hoc "seal" eder (macOS 14+ "damaged" hatasını yine de önler).
+#   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
 name: Bundle (JRE-gömülü paketler)
 
 on:
@@ -40,41 +47,78 @@ jobs:
   bundle:
     name: Paketle ${{ matrix.target }}
     needs: jar
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    # secrets.X doğrudan if: içinde kullanılamaz → "Developer ID cert var mı?"
+    # bilgisini job-level boolean string ('true'/'false') olarak yüzeye çıkarıp
+    # macOS imza/keychain adımını buna göre koşullarız. Değer secret'ı sızdırmaz,
+    # yalnızca varlığını gösterir (runhq deseni).
+    env:
+      APPLE_CERT_PRESENT: ${{ secrets.APPLE_CERTIFICATE != '' }}
     strategy:
       fail-fast: false
       matrix:
-        target: [windows-x64, windows-x86, macos-x64, macos-arm64, linux-x64]
+        include:
+          # Windows (.exe) + Linux (.AppImage): Linux runner'ında üretilir.
+          - { target: windows-x64, runner: ubuntu-latest }
+          - { target: windows-x86, runner: ubuntu-latest }
+          - { target: linux-x64, runner: ubuntu-latest }
+          - { target: linux-arm64, runner: ubuntu-latest }
+          # macOS (.dmg): codesign/notarytool/stapler yalnız macOS'ta çalışır.
+          # Tek macOS runner hem x64 hem arm64 bundle'ı imzalayabilir (codesign
+          # + notarization mimari-bağımsızdır).
+          - { target: macos-x64, runner: macos-14 }
+          - { target: macos-arm64, runner: macos-14 }
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "8"
       - name: Fat-jar'ı indir
         uses: actions/download-artifact@v4
         with:
           name: fat-jar
           path: target
-      - name: Araçlar (zip + Windows .exe için launch4j)
+      - name: "Araçlar (Linux: .exe için NSIS, .AppImage için squashfs-tools)"
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip
-          curl -fsSL -o /tmp/l4j.tgz \
-            https://downloads.sourceforge.net/project/launch4j/launch4j-3/3.50/launch4j-3.50-linux-x64.tgz
-          mkdir -p /tmp/l4j && tar -xzf /tmp/l4j.tgz -C /tmp/l4j
-          printf '#!/bin/sh\nexec java -jar /tmp/l4j/launch4j/launch4j.jar "$@"\n' > /tmp/launch4j.sh
-          chmod +x /tmp/launch4j.sh
+          sudo apt-get install -y zip unzip nsis squashfs-tools
+      - name: Apple Developer ID'yi geçici keychain'e al (macOS)
+        if: runner.os == 'macOS' && env.APPLE_CERT_PRESENT == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN" >/dev/null
+          # İmzalı keychain'i aramaya dahil et (mevcutları koru).
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | sed 's/"//g')
+          rm -f "$RUNNER_TEMP/cert.p12"
       - name: Paketle (${{ matrix.target }})
         env:
-          LAUNCH4J: /tmp/launch4j.sh
+          # macOS imza/notarization: secret'lar boşsa script ad-hoc'a düşer.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         run: |
           chmod +x scripts/package-dist.sh
           scripts/package-dist.sh "${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
           name: bundle-${{ matrix.target }}
-          path: dist/*.zip
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.zip
           retention-days: 7
 
   release:
@@ -92,12 +136,13 @@ jobs:
       - name: SHA256SUMS üret
         run: |
           cd dist
-          sha256sum *.zip > SHA256SUMS.txt
+          sha256sum *.exe *.dmg *.AppImage *.zip 2>/dev/null > SHA256SUMS.txt || true
           cat SHA256SUMS.txt
       - name: Release'e yükle
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          shopt -s nullglob
           gh release upload "${{ github.event.release.tag_name }}" \
-            dist/*.zip dist/SHA256SUMS.txt \
+            dist/*.exe dist/*.dmg dist/*.AppImage dist/*.zip dist/SHA256SUMS.txt \
             --clobber --repo "${{ github.repository }}"
