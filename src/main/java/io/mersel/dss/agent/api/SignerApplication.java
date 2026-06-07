@@ -34,6 +34,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 import io.mersel.dss.agent.api.ui.SplashLifecycle;
+import io.mersel.dss.agent.api.ui.StartupError;
+import io.mersel.dss.agent.api.ui.StartupErrorClassifier;
+import io.mersel.dss.agent.api.ui.StartupErrorWindow;
 
 /**
  * Spring Boot uygulama girişi.
@@ -68,7 +71,51 @@ public class SignerApplication {
     maybeShowSplash();
     SpringApplication app = new SpringApplication(SignerApplication.class);
     app.setDefaultProperties(Collections.singletonMap("spring.config.location", CONFIG_LOCATION));
-    app.run(args);
+    try {
+      app.run(args);
+    } catch (Throwable startupFailure) {
+      // Spring context kalkamadı (örn. port zaten dinleniyor → başka bir örnek çalışıyor). Bu
+      // noktada ApplicationReadyEvent hiç tetiklenmez; DesktopUiBootstrap splash'i kapatmaz.
+      // Görünür
+      // splash JWindow'u non-daemon AWT thread'ini canlı tuttuğu için JVM da kendiliğinden
+      // sonlanmaz — kullanıcı sonsuza dek dönen splash'le baş başa kalır. Bu yüzden burada hatayı
+      // yakalayıp splash'i kapatıyor, anlaşılır bir hata ekranı gösteriyor ve süreci
+      // sonlandırıyoruz.
+      handleStartupFailure(startupFailure);
+    }
+  }
+
+  /**
+   * Başlatma hatasını kullanıcıya gösterir ve süreci sonlandırır. GUI mevcutsa {@link
+   * StartupErrorWindow} açılır; pencere kapatılınca {@code System.exit(1)} çalışır. Headless / UI
+   * kapalı durumda doğrudan stderr'e yazıp non-zero kod ile çıkılır.
+   */
+  private static void handleStartupFailure(Throwable startupFailure) {
+    closeSplashQuietly();
+    StartupError error = StartupErrorClassifier.classify(startupFailure);
+    System.err.println("[Mersel DSS] " + error.getHeadline() + " — " + error.getMessage());
+
+    boolean uiCapable =
+        !GraphicsEnvironment.isHeadless()
+            && isFlagEnabled("MERSEL_AGENT_UI", true)
+            && isFlagEnabled("MERSEL_AGENT_UI_ERROR_WINDOW", true);
+    if (uiCapable) {
+      boolean shown =
+          StartupErrorWindow.show(error, readImplementationVersion(), () -> System.exit(1));
+      if (shown) {
+        // Pencere görünür kaldı; AWT thread JVM'i canlı tutar. Kapatıldığında onClose → exit(1).
+        return;
+      }
+    }
+    System.exit(1);
+  }
+
+  private static void closeSplashQuietly() {
+    try {
+      SplashLifecycle.close();
+    } catch (RuntimeException ignored) {
+      // Splash kapatılamadı; hata ekranı yine de gösterilecek.
+    }
   }
 
   /**

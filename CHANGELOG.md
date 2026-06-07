@@ -6,6 +6,38 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Added
+
+- **Başlatma hatası ekranı (`StartupErrorWindow`)** — açılış başarısız olduğunda
+  splash'in yerini alan, splash ile aynı koyu paleti paylaşan ama danger (kırmızı)
+  accent'li bir hata penceresi. Anlaşılır başlık + açıklama + kaydırılabilir
+  "Teknik ayrıntılar" (cause zinciri + stack trace) + "Ayrıntıları Kopyala" ve
+  "Kapat" butonları içerir. Pencere kapatılınca süreç `System.exit(1)` ile temiz
+  şekilde sonlanır. `MERSEL_AGENT_UI_ERROR_WINDOW=false` ile devre dışı bırakılabilir;
+  headless / UI kapalı ortamlarda hiç çizilmez, hata yalnızca `stderr`'e yazılır.
+- **`StartupErrorClassifier`** — başlatma exception'ını kullanıcı dostu bir
+  `StartupError`'a çevirir. En kritik senaryo olan **port zaten kullanımda**
+  durumunu (`PortInUseException` sınıf adı, `BindException` ve "address already in
+  use" / "zaten kullanımda" mesaj kalıpları üzerinden) ayrı bir kovaya alır;
+  `getPort()`'u reflection ile okuyup port numarasını mesaja işler ve kullanıcıya
+  *"Uygulama Zaten Çalışıyor — büyük olasılıkla başka bir örnek çalışıyor"* yönergesi
+  verir. Spring config "Failed to bind properties" gibi hataları yanlışlıkla
+  port-in-use sanmamak için kasıtlı olarak dar kalıplar kullanır.
+
+### Fixed
+
+- **Açılışta hata oluştuğunda sonsuza dek dönen splash kilidi giderildi.** Splash,
+  Spring tam ayağa kalkınca (`ApplicationReadyEvent`) `DesktopUiBootstrap` tarafından
+  kapatılıyordu. Ancak başlatma o event'e ulaşamadan patlarsa (örn. yapılandırılan
+  port işletim sisteminde zaten dinleniyorsa — yani **uygulamanın başka bir örneği
+  çalışıyorsa**) iki sorun birden oluşuyordu: (1) `ApplicationReadyEvent` hiç
+  tetiklenmediği için splash kapatılmıyor, (2) görünür `JWindow` non-daemon AWT
+  thread'ini canlı tuttuğu için JVM de kendiliğinden sonlanmıyordu. Sonuç: kullanıcı
+  sonsuza kadar dönen bir splash ile baş başa kalıyor, süreç de ölmüyordu.
+  `SignerApplication.main` artık `SpringApplication.run` çağrısını sarıyor; herhangi
+  bir başlatma hatasında splash'i kapatıp yukarıdaki hata ekranını gösteriyor ve
+  süreci sonlandırıyor.
+
 ## [1.1.4-rc.1] — 2026-06-05
 
 ### Added
