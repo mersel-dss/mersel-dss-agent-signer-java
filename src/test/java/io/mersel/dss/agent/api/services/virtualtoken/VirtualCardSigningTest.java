@@ -168,8 +168,7 @@ class VirtualCardSigningTest {
     dto.setTerminalName("PFX");
     dto.setPin("ignored");
     dto.setCertificateId(serialHex);
-    dto.setContent(
-        new InMemoryMultipartFile("file", "doc.xml", "application/xml", sampleXml()));
+    dto.setContent(new InMemoryMultipartFile("file", "doc.xml", "application/xml", sampleXml()));
 
     XadesService xades =
         new XadesService(null, CertificateChainBuilder.passthrough(), null, registry);

@@ -122,8 +122,7 @@ public class VirtualCardController {
     }
     char[] pw = password == null ? new char[0] : password.toCharArray();
     try {
-      VirtualToken token =
-          registry.registerPkcs12(name, pfxBytes, pw, file.getOriginalFilename());
+      VirtualToken token = registry.registerPkcs12(name, pfxBytes, pw, file.getOriginalFilename());
       return ResponseEntity.ok(VirtualCardResponse.from(token));
     } finally {
       java.util.Arrays.fill(pw, '\0');

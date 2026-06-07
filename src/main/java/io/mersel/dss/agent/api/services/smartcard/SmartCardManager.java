@@ -104,7 +104,8 @@ public class SmartCardManager {
   public Path resolveLibrary(
       String terminalName, String pkcs11LibraryPath, String cardTypeOverride) {
     // Sanal PKCS#11 kartı (Dummy Card): terminalName registry'de tanımlıysa ve çağıran lib yolu
-    // vermediyse, kayıtlı kütüphane yolunu kullan. Fiziksel kart / ATR algılaması atlanır; aşağıdaki
+    // vermediyse, kayıtlı kütüphane yolunu kullan. Fiziksel kart / ATR algılaması atlanır;
+    // aşağıdaki
     // resolver explicit path'i diskte çözer.
     if (StringUtils.isBlank(pkcs11LibraryPath) && virtualTokenRegistry != null) {
       VirtualToken vt = virtualTokenRegistry.find(terminalName);

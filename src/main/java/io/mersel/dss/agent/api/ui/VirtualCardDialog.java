@@ -347,7 +347,10 @@ final class VirtualCardDialog extends JDialog {
   private void chooseLibFile() {
     File f =
         chooseFile(
-            "PKCS#11 kütüphanesi seç", "PKCS#11 kütüphane (*.so, *.dll, *.dylib)", "so", "dll",
+            "PKCS#11 kütüphanesi seç",
+            "PKCS#11 kütüphane (*.so, *.dll, *.dylib)",
+            "so",
+            "dll",
             "dylib");
     if (f != null) {
       libPathField.setText(f.getAbsolutePath());
@@ -549,7 +552,8 @@ final class VirtualCardDialog extends JDialog {
       pkcs12Radio.setSelected(true);
       formCards.show(formCardPanel, CARD_PKCS12);
       pfxNameField.setText(name);
-      editModeLabel.setText("Düzenleniyor: " + name + " — PFX dosyasını ve parolayı yeniden seçin.");
+      editModeLabel.setText(
+          "Düzenleniyor: " + name + " — PFX dosyasını ve parolayı yeniden seçin.");
     } else {
       pkcs11Radio.setSelected(true);
       formCards.show(formCardPanel, CARD_PKCS11);

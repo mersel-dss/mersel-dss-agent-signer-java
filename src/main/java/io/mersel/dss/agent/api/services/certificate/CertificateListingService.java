@@ -53,11 +53,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import io.mersel.dss.agent.api.exceptions.CertificateLookupException;
 import io.mersel.dss.agent.api.models.CertificateResponse;
 import io.mersel.dss.agent.api.models.CertificateStatusResponse;
 import io.mersel.dss.agent.api.models.enums.CertificatePurpose;
 import io.mersel.dss.agent.api.models.enums.TurkishCertificatePolicy;
-import io.mersel.dss.agent.api.exceptions.CertificateLookupException;
 import io.mersel.dss.agent.api.services.keystore.IaikPkcs11Signer;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11PublicCertificateReader;
 import io.mersel.dss.agent.api.services.keystore.TokenCertificate;
@@ -180,8 +180,7 @@ public class CertificateListingService {
     } catch (RuntimeException re) {
       throw re;
     } catch (Exception e) {
-      throw new CertificateLookupException(
-          "PFX sertifikaları listelenemedi: " + e.getMessage(), e);
+      throw new CertificateLookupException("PFX sertifikaları listelenemedi: " + e.getMessage(), e);
     } finally {
       java.util.Arrays.fill(pw, '\0');
     }
@@ -192,8 +191,7 @@ public class CertificateListingService {
   }
 
   /** PKCS#12 keystore'dan alias zincirini X.509 dizisine çevirir; yoksa tek leaf döner. */
-  private static X509Certificate[] pkcs12Chain(
-      KeyStore ks, String alias, X509Certificate leaf) {
+  private static X509Certificate[] pkcs12Chain(KeyStore ks, String alias, X509Certificate leaf) {
     try {
       Certificate[] chain = ks.getCertificateChain(alias);
       if (chain != null && chain.length > 0) {

@@ -213,9 +213,7 @@ public class XadesService {
         String msg =
             "XAdES-BES (PFX) imzalama başarısız: "
                 + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
-                + (rootMsg != null && !rootMsg.equals(e.getMessage())
-                    ? " | root: " + rootMsg
-                    : "");
+                + (rootMsg != null && !rootMsg.equals(e.getMessage()) ? " | root: " + rootMsg : "");
         throw (SignatureOperationException)
             new SignatureOperationException(code, msg, e).withDiagnostics(diagSw);
       }
@@ -332,9 +330,7 @@ public class XadesService {
         String msg =
             "XAdES CounterSignature (PFX) başarısız: "
                 + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
-                + (rootMsg != null && !rootMsg.equals(e.getMessage())
-                    ? " | root: " + rootMsg
-                    : "");
+                + (rootMsg != null && !rootMsg.equals(e.getMessage()) ? " | root: " + rootMsg : "");
         throw (SignatureOperationException)
             new SignatureOperationException(code, msg, e).withDiagnostics(diagSw);
       }
@@ -407,8 +403,7 @@ public class XadesService {
     diag.setFallbackStrategy("software-pkcs12-pfx");
     mergeWarning(
         diag, "Counter-signature, yazılım PKCS#12 (PFX) anahtarı ile atıldı (kart kullanılmadı).");
-    Pkcs11Session session =
-        Pkcs11Session.forPkcs12(token.getKeyStore(), token.passwordString());
+    Pkcs11Session session = Pkcs11Session.forPkcs12(token.getKeyStore(), token.passwordString());
     RuntimeException bodyFailure = null;
     try {
       return signHrWithSession(session, dto, diag);
@@ -911,8 +906,7 @@ public class XadesService {
       throws Exception {
     Element root = document.getDocumentElement();
 
-    String sigId =
-        "MerselSig-" + UUID.randomUUID().toString().replaceAll("-", "").substring(0, 12);
+    String sigId = "MerselSig-" + UUID.randomUUID().toString().replaceAll("-", "").substring(0, 12);
     String objectId = "Object-Id-" + UUID.randomUUID();
     String signedPropsId = "Signed-Properties-Id-" + UUID.randomUUID();
     String signedPropsRefId = "Reference-Id-" + UUID.randomUUID();
@@ -957,10 +951,10 @@ public class XadesService {
   /* ================================================================== */
 
   /**
-   * Sanal PKCS#12 (PFX) kartı için XAdES-BES enveloped imza üretir. PKCS#11 native yoluyla
-   * <b>bire bir aynı</b> DOM iskeletini ({@link #buildXadesBesSkeleton}) kullanır; tek fark imza
-   * değerini Apache Santuario'nun {@code XMLSignature.sign(PrivateKey)} çağrısının yazılım anahtarı
-   * ile üretmesidir (ECDSA için R||S kodlaması dahil). Kart firmware'ine özgü raw-only / PSS
+   * Sanal PKCS#12 (PFX) kartı için XAdES-BES enveloped imza üretir. PKCS#11 native yoluyla <b>bire
+   * bir aynı</b> DOM iskeletini ({@link #buildXadesBesSkeleton}) kullanır; tek fark imza değerini
+   * Apache Santuario'nun {@code XMLSignature.sign(PrivateKey)} çağrısının yazılım anahtarı ile
+   * üretmesidir (ECDSA için R||S kodlaması dahil). Kart firmware'ine özgü raw-only / PSS
    * patolojileri yazılım yolunda oluşmaz.
    *
    * @param identifier sertifika seçici (alias / X.509 serial / SHA-1 thumbprint)
@@ -1007,8 +1001,7 @@ public class XadesService {
 
       NodeList svList = santSig.getElement().getElementsByTagNameNS(DS_NS, "SignatureValue");
       if (svList.getLength() > 0) {
-        ((Element) svList.item(0))
-            .setAttribute("Id", "Signature-Value-Id-" + UUID.randomUUID());
+        ((Element) svList.item(0)).setAttribute("Id", "Signature-Value-Id-" + UUID.randomUUID());
       }
       rewrapBase64InSignatureSubtree(document.getDocumentElement());
       return serialise(document);

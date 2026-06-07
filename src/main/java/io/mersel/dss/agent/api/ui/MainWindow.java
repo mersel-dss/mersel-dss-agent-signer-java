@@ -427,9 +427,9 @@ public final class MainWindow {
   }
 
   /**
-   * "Sanal Kart Tanımla" eylem satırı — kart takılı olmasa bile PFX (PKCS#12) veya PKCS#11
-   * sürücüsü üzerinden Dummy Card tanımlamayı sağlar. {@link #virtualCardActions} null ise (port
-   * enjekte edilmemiş) {@code null} döner ve satır hiç render edilmez.
+   * "Sanal Kart Tanımla" eylem satırı — kart takılı olmasa bile PFX (PKCS#12) veya PKCS#11 sürücüsü
+   * üzerinden Dummy Card tanımlamayı sağlar. {@link #virtualCardActions} null ise (port enjekte
+   * edilmemiş) {@code null} döner ve satır hiç render edilmez.
    */
   private JPanel buildVirtualCardRow() {
     if (virtualCardActions == null) {

@@ -74,10 +74,10 @@ import com.fasterxml.jackson.databind.SerializationFeature;
  * <h2>Güvenlik</h2>
  *
  * PFX parolaları AES-GCM ile {@code .secret.key} altında şifrelenip diske öyle yazılır; dizin ve
- * dosyalar POSIX sistemlerde yalnız sahip (owner) okuyabilecek şekilde kısıtlanır. Bu, parolayı
- * düz metin disk okumalarına ve gözle taramaya karşı korur; ancak anahtar dosyasına erişebilen bir
- * saldırgana karşı tam koruma değildir (tam koruma için OS keychain gerekirdi). Kullanıcı
- * deneyimi tercihi olarak parola saklanır ki yeniden başlatmada imza için tekrar sorulmasın.
+ * dosyalar POSIX sistemlerde yalnız sahip (owner) okuyabilecek şekilde kısıtlanır. Bu, parolayı düz
+ * metin disk okumalarına ve gözle taramaya karşı korur; ancak anahtar dosyasına erişebilen bir
+ * saldırgana karşı tam koruma değildir (tam koruma için OS keychain gerekirdi). Kullanıcı deneyimi
+ * tercihi olarak parola saklanır ki yeniden başlatmada imza için tekrar sorulmasın.
  *
  * <p>Depo herhangi bir nedenle hazırlanamazsa ({@link #enabled} {@code false}) tüm işlemler no-op
  * olur ve registry bellek-içi moda düşer — özellik yine çalışır, sadece kalıcılık devre dışı kalır.
@@ -99,8 +99,7 @@ public class VirtualTokenStore {
   private final Path baseDir;
   private final Path indexFile;
   private final Path pfxDir;
-  private final ObjectMapper mapper =
-      new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+  private final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
   private final Object lock = new Object();
   private final boolean enabled;
   private SecretKey secretKey;
@@ -156,7 +155,8 @@ public class VirtualTokenStore {
       for (Entry e : entries) {
         try {
           if (TYPE_PKCS11.equals(e.type)) {
-            out.add(new Loaded(VirtualTokenType.PKCS11, e.name, e.source, e.libraryPath, null, null));
+            out.add(
+                new Loaded(VirtualTokenType.PKCS11, e.name, e.source, e.libraryPath, null, null));
           } else if (TYPE_PKCS12.equals(e.type)) {
             byte[] bytes = Files.readAllBytes(pfxDir.resolve(e.pfxFile));
             char[] pw = decryptPassword(e.passwordEnc);

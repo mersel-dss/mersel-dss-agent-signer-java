@@ -57,9 +57,9 @@ import io.mersel.dss.agent.api.services.keystore.Pkcs12KeyStores;
  * (kullanıcı tercihi). PKCS#12 parolaları {@code char[]} olarak bellekte saklanır ve {@link
  * #remove(String)} / {@link #shutdown()} sırasında sıfırlanır.
  *
- * <p>{@code name} alanı hem benzersiz anahtar hem de imza/listeleme uçlarındaki {@code terminalName}
- * olarak kullanılır; bu yüzden gerçek bir PC/SC okuyucu adıyla çakışmaması beklenir (örn. "PFX -
- * firma.pfx" gibi açık bir ad verilir).
+ * <p>{@code name} alanı hem benzersiz anahtar hem de imza/listeleme uçlarındaki {@code
+ * terminalName} olarak kullanılır; bu yüzden gerçek bir PC/SC okuyucu adıyla çakışmaması beklenir
+ * (örn. "PFX - firma.pfx" gibi açık bir ad verilir).
  */
 @Component
 public class VirtualTokenRegistry {
@@ -100,7 +100,10 @@ public class VirtualTokenRegistry {
         } else {
           try {
             doRegisterPkcs12(
-                loaded.getName(), loaded.getPfxBytes(), loaded.getPassword(), loaded.getSource(),
+                loaded.getName(),
+                loaded.getPfxBytes(),
+                loaded.getPassword(),
+                loaded.getSource(),
                 false);
           } finally {
             if (loaded.getPassword() != null) {
@@ -250,7 +253,8 @@ public class VirtualTokenRegistry {
         String alias = aliases.nextElement();
         if (ks.isKeyEntry(alias)) {
           try {
-            if (ks.getKey(alias, pw) != null && ks.getCertificate(alias) instanceof X509Certificate) {
+            if (ks.getKey(alias, pw) != null
+                && ks.getCertificate(alias) instanceof X509Certificate) {
               return true;
             }
           } catch (Exception perAlias) {

@@ -36,7 +36,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class VirtualCardResponse {
 
-  @Schema(description = "Sanal kartın adı; terminalName olarak kullanılır.", example = "PFX - firma.pfx")
+  @Schema(
+      description = "Sanal kartın adı; terminalName olarak kullanılır.",
+      example = "PFX - firma.pfx")
   private String name;
 
   @Schema(description = "Kaynak tipi: PKCS11 | PKCS12.")
@@ -59,10 +61,7 @@ public class VirtualCardResponse {
 
   public static VirtualCardResponse from(VirtualToken token) {
     return new VirtualCardResponse(
-        token.getName(),
-        token.getSourceType(),
-        token.getDisplayCardType(),
-        token.getSource());
+        token.getName(), token.getSourceType(), token.getDisplayCardType(), token.getSource());
   }
 
   public String getName() {
