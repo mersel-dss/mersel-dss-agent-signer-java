@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.1.6] — 2026-06-07
+
 ### Changed
 
 - **Trace recorder gürültü filtresine kök (`/`), tanılama polling'i
@@ -1688,7 +1690,8 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.5...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.4-rc.1...v1.1.5
 [1.1.4-rc.1]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.3...v1.1.4-rc.1
 [1.1.3]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.2...v1.1.3
