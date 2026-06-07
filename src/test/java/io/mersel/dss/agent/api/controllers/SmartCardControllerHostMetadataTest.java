@@ -65,7 +65,12 @@ class SmartCardControllerHostMetadataTest {
     when(reader.listCardsWithMeta()).thenReturn(Collections.<SmartCardInfo>emptyList());
 
     SmartCardController controller =
-        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class), null);
+        new SmartCardController(
+            reader,
+            listing,
+            mock(SmartCardPinValidator.class),
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
     ResponseEntity<SmartCardResponse> resp = controller.listCards();
 
     assertThat(resp.getStatusCodeValue()).isEqualTo(200);
@@ -94,7 +99,12 @@ class SmartCardControllerHostMetadataTest {
     when(reader.listCardsWithMeta()).thenReturn(Collections.singletonList(info));
 
     SmartCardController controller =
-        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class), null);
+        new SmartCardController(
+            reader,
+            listing,
+            mock(SmartCardPinValidator.class),
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
     ResponseEntity<SmartCardResponse> resp = controller.listCards();
 
     SmartCardResponse body = resp.getBody();
@@ -117,7 +127,12 @@ class SmartCardControllerHostMetadataTest {
     when(reader.listCardsWithMeta()).thenReturn(Collections.singletonList(info));
 
     SmartCardController controller =
-        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class), null);
+        new SmartCardController(
+            reader,
+            listing,
+            mock(SmartCardPinValidator.class),
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
     ResponseEntity<SmartCardResponse> resp = controller.listCards();
 
     SmartCardResponse body = resp.getBody();
@@ -136,7 +151,12 @@ class SmartCardControllerHostMetadataTest {
     when(reader.listCardsWithMeta()).thenReturn(Collections.<SmartCardInfo>emptyList());
 
     SmartCardController controller =
-        new SmartCardController(reader, listing, mock(SmartCardPinValidator.class), null);
+        new SmartCardController(
+            reader,
+            listing,
+            mock(SmartCardPinValidator.class),
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
     SmartCardResponse body = controller.listCards().getBody();
     String json = new ObjectMapper().writeValueAsString(body);
 

@@ -96,7 +96,8 @@ class XadesCounterSignatureTest {
         new XadesService(
             null,
             io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder.passthrough(),
-            null);
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
     byte[] counterSignedXml;
     try (Pkcs11Session session = loaded.openSession()) {
       counterSignedXml = service.signHrWithSession(session, dto, null);

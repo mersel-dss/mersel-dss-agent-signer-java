@@ -28,12 +28,15 @@ package io.mersel.dss.agent.api.controllers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -46,6 +49,8 @@ import io.mersel.dss.agent.api.models.PinValidationResponse;
 import io.mersel.dss.agent.api.services.certificate.CertificateListingService;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardPinValidator;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardReaderService;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry;
+import io.mersel.dss.agent.api.testsupport.PfxTestKey;
 
 /**
  * {@link SmartCardController#validatePin(ValidatePinDto)} controller-level davranışı — {@link
@@ -67,7 +72,8 @@ class SmartCardControllerValidatePinTest {
             mock(SmartCardReaderService.class),
             mock(CertificateListingService.class),
             validator,
-            null);
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -95,7 +101,8 @@ class SmartCardControllerValidatePinTest {
             mock(SmartCardReaderService.class),
             mock(CertificateListingService.class),
             validator,
-            null);
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -112,6 +119,41 @@ class SmartCardControllerValidatePinTest {
   }
 
   @Test
+  void pkcs12VirtualCardShortCircuitsValidatorAndReturnsValid() throws Exception {
+    PfxTestKey key = PfxTestKey.KURUM01_RSA2048;
+    assumeTrue(key.isAvailable(), "Skip — PFX yok: " + key.getAbsolutePath());
+
+    VirtualTokenRegistry registry = new VirtualTokenRegistry();
+    registry.registerPkcs12(
+        "PFX Kart",
+        Files.readAllBytes(key.getFile().toPath()),
+        key.getPassword(),
+        key.getFileName());
+
+    SmartCardPinValidator validator = mock(SmartCardPinValidator.class);
+    SmartCardController controller =
+        new SmartCardController(
+            mock(SmartCardReaderService.class),
+            mock(CertificateListingService.class),
+            validator,
+            null,
+            registry);
+
+    ValidatePinDto dto = new ValidatePinDto();
+    dto.setTerminalName("PFX Kart");
+    dto.setPin("herhangi-bir-sey"); // PFX'te PIN yok sayılır
+
+    ResponseEntity<PinValidationResponse> resp = controller.validatePin(dto);
+    assertThat(resp.getStatusCodeValue()).isEqualTo(200);
+    assertThat(resp.getBody()).isNotNull();
+    assertThat(resp.getBody().isValid()).isTrue();
+    assertThat(resp.getBody().getCardType()).isEqualTo("PKCS#12 (PFX)");
+    assertThat(resp.getBody().getPkcs11LibraryPath()).isNull();
+    // PKCS#11 doğrulayıcısı hiç çağrılmamalı (C_Login yok).
+    verify(validator, never()).validate(any(), any(), any(), any());
+  }
+
+  @Test
   void wrongPinPropagatesPkcs11AuthExceptionForGlobalHandlerToTranslateTo401() {
     SmartCardPinValidator validator = mock(SmartCardPinValidator.class);
     when(validator.validate(any(), any(), any(), any()))
@@ -122,7 +164,8 @@ class SmartCardControllerValidatePinTest {
             mock(SmartCardReaderService.class),
             mock(CertificateListingService.class),
             validator,
-            null);
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");
@@ -145,7 +188,8 @@ class SmartCardControllerValidatePinTest {
             mock(SmartCardReaderService.class),
             mock(CertificateListingService.class),
             validator,
-            null);
+            null,
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
 
     ValidatePinDto dto = new ValidatePinDto();
     dto.setTerminalName("ACR39U");

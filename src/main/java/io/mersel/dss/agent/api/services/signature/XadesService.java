@@ -170,15 +170,19 @@ public class XadesService {
   private final SmartCardManager cardManager;
   private final CertificateChainBuilder chainBuilder;
   private final SmartCardReaderService readerService;
+  private final io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry
+      virtualTokenRegistry;
 
   @Autowired
   public XadesService(
       SmartCardManager cardManager,
       CertificateChainBuilder chainBuilder,
-      SmartCardReaderService readerService) {
+      SmartCardReaderService readerService,
+      io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry virtualTokenRegistry) {
     this.cardManager = cardManager;
     this.chainBuilder = chainBuilder;
     this.readerService = readerService;
+    this.virtualTokenRegistry = virtualTokenRegistry;
   }
 
   /* ================================================================== */
@@ -186,6 +190,37 @@ public class XadesService {
   /* ================================================================== */
 
   public byte[] signXmlDocument(SignDocumentDto dto) {
+    // Sanal PKCS#12 (PFX) kartı: yazılım anahtarıyla BES imza (PIN yerine kayıtlı parola).
+    io.mersel.dss.agent.api.services.virtualtoken.VirtualToken virtual =
+        virtualTokenRegistry.find(dto.getTerminalName());
+    if (virtual != null && virtual.isPkcs12()) {
+      log.info(
+          "XAdES-BES imzalama (sanal PFX kartı): terminal={}, certId={}",
+          dto.getTerminalName(),
+          dto.getCertificateId());
+      SignatureDiagnostics diagSw = baseDiagnosticsFor(dto, null);
+      byte[] xmlBytesSw = readBytes(dto);
+      try {
+        return doXadesBesSignSoftware(xmlBytesSw, virtual, dto.getCertificateId(), diagSw);
+      } catch (SignerException known) {
+        if (known.getDiagnostics() == null) {
+          known.withDiagnostics(diagSw);
+        }
+        throw known;
+      } catch (Exception e) {
+        String code = classifySignatureFailure(e);
+        String rootMsg = CauseChainExtractor.rootMessage(e);
+        String msg =
+            "XAdES-BES (PFX) imzalama başarısız: "
+                + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+                + (rootMsg != null && !rootMsg.equals(e.getMessage())
+                    ? " | root: " + rootMsg
+                    : "");
+        throw (SignatureOperationException)
+            new SignatureOperationException(code, msg, e).withDiagnostics(diagSw);
+      }
+    }
+
     Path libraryPath =
         cardManager.resolveLibrary(dto.getTerminalName(), dto.getPkcs11LibraryPath());
     log.info(
@@ -275,6 +310,36 @@ public class XadesService {
   }
 
   public byte[] signHrXmlCounterSignature(SignDocumentDto dto) {
+    // Sanal PKCS#12 (PFX) kartı: counter-signature yazılım keystore üzerinden (PIN yerine parola).
+    io.mersel.dss.agent.api.services.virtualtoken.VirtualToken virtual =
+        virtualTokenRegistry.find(dto.getTerminalName());
+    if (virtual != null && virtual.isPkcs12()) {
+      log.info(
+          "XAdES CounterSignature (sanal PFX kartı): terminal={}, certId={}",
+          dto.getTerminalName(),
+          dto.getCertificateId());
+      SignatureDiagnostics diagSw = baseDiagnosticsFor(dto, null);
+      try {
+        return signHrCounterSignatureViaSoftware(virtual, dto, diagSw);
+      } catch (SignerException known) {
+        if (known.getDiagnostics() == null) {
+          known.withDiagnostics(diagSw);
+        }
+        throw known;
+      } catch (RuntimeException e) {
+        String code = classifySignatureFailure(e);
+        String rootMsg = CauseChainExtractor.rootMessage(e);
+        String msg =
+            "XAdES CounterSignature (PFX) başarısız: "
+                + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+                + (rootMsg != null && !rootMsg.equals(e.getMessage())
+                    ? " | root: " + rootMsg
+                    : "");
+        throw (SignatureOperationException)
+            new SignatureOperationException(code, msg, e).withDiagnostics(diagSw);
+      }
+    }
+
     Path libraryPath =
         cardManager.resolveLibrary(dto.getTerminalName(), dto.getPkcs11LibraryPath());
     log.info(
@@ -330,6 +395,42 @@ public class XadesService {
    * suppress edip yanlış branch'e (fallback değerlendirmesine) düşmesin. close hatası yalnız
    * log'lanır, orijinal exception (varsa) korunur.
    */
+  /**
+   * Sanal PKCS#12 (PFX) kartı için counter-signature: yüklenmiş software keystore'u {@link
+   * Pkcs11Session#forPkcs12} ile sarmalayıp aynı {@link #signHrWithSession} gövdesini kullanır.
+   * Kart firmware'i olmadığı için SunPKCS11 patolojileri ve native fallback'e gerek yoktur.
+   */
+  byte[] signHrCounterSignatureViaSoftware(
+      io.mersel.dss.agent.api.services.virtualtoken.VirtualToken token,
+      SignDocumentDto dto,
+      SignatureDiagnostics diag) {
+    diag.setFallbackStrategy("software-pkcs12-pfx");
+    mergeWarning(
+        diag, "Counter-signature, yazılım PKCS#12 (PFX) anahtarı ile atıldı (kart kullanılmadı).");
+    Pkcs11Session session =
+        Pkcs11Session.forPkcs12(token.getKeyStore(), token.passwordString());
+    RuntimeException bodyFailure = null;
+    try {
+      return signHrWithSession(session, dto, diag);
+    } catch (RuntimeException re) {
+      bodyFailure = re;
+      if (re instanceof SignerException && ((SignerException) re).getDiagnostics() == null) {
+        ((SignerException) re).withDiagnostics(diag);
+      }
+      throw re;
+    } finally {
+      try {
+        session.close();
+      } catch (RuntimeException closeFail) {
+        if (bodyFailure != null) {
+          bodyFailure.addSuppressed(closeFail);
+        } else {
+          log.warn("Pkcs11Session.close() başarısız (PFX counter-sig): {}", closeFail.toString());
+        }
+      }
+    }
+  }
+
   byte[] signHrCounterSignatureViaSunPkcs11(
       Path libraryPath, SignDocumentDto dto, SignatureDiagnostics diag) {
     Pkcs11Session session = Pkcs11Session.open(libraryPath, dto.getPin(), dto.getTerminalName());
@@ -753,46 +854,9 @@ public class XadesService {
               + " atıldı.");
 
       Document document = parseXml(xmlBytes);
-      Element root = document.getDocumentElement();
-
-      String sigId =
-          "MerselSig-" + UUID.randomUUID().toString().replaceAll("-", "").substring(0, 12);
       String sigValueId = "Signature-Value-Id-" + UUID.randomUUID();
-      String objectId = "Object-Id-" + UUID.randomUUID();
-      String signedPropsId = "Signed-Properties-Id-" + UUID.randomUUID();
-      String signedPropsRefId = "Reference-Id-" + UUID.randomUUID();
-      String envelopedRefId = "Reference-Id-" + UUID.randomUUID();
-
       org.apache.xml.security.signature.XMLSignature santSig =
-          new org.apache.xml.security.signature.XMLSignature(document, "", sigUrl, c14nUrl);
-      santSig.setId(sigId);
-      root.appendChild(santSig.getElement());
-
-      // Reference 1: URI="" with EnvelopedSignatureTransform
-      Transforms tfsEnveloped = new Transforms(document);
-      tfsEnveloped.addTransform(Transforms.TRANSFORM_ENVELOPED_SIGNATURE);
-      santSig.addDocument("", tfsEnveloped, digestUrl, envelopedRefId, null);
-
-      // Reference 2: URI="#signedPropsId" with c14n transform; Type = SignedProperties
-      Transforms tfsSp = new Transforms(document);
-      tfsSp.addTransform(Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS);
-      santSig.addDocument(
-          "#" + signedPropsId, tfsSp, digestUrl, signedPropsRefId, XADES_TYPE_SIGNED_PROPERTIES);
-
-      // KeyInfo: <ds:X509Data><ds:X509Certificate> +
-      // <ds:KeyValue><ds:RSAKeyValue|dsig11:ECKeyValue>
-      // Santuario `KeyInfo.add(PublicKey)` instanceof dispatch ile RSAKeyValue / ECKeyValue üretir.
-      santSig.addKeyInfo(signingCert);
-      santSig.addKeyInfo(signingCert.getPublicKey());
-
-      // Object/QualifyingProperties/SignedProperties (counter-sig path'iyle aynı şablon)
-      ObjectContainer obj = new ObjectContainer(document);
-      obj.setId(objectId);
-      Element qualifyingProps = buildQualifyingProperties(document, sigId, signedPropsId);
-      Element signedPropsEl = (Element) qualifyingProps.getFirstChild();
-      populateSignedProperties(document, signedPropsEl, signingCert, digestUrl);
-      obj.getElement().appendChild(qualifyingProps);
-      santSig.appendObject(obj);
+          buildXadesBesSkeleton(document, signingCert, sigUrl, digestUrl, c14nUrl);
 
       // Reference DigestValues hesapla (PrivateKey'siz)
       santSig.getSignedInfo().generateDigestValues();
@@ -826,6 +890,126 @@ public class XadesService {
       // SignatureValue burada JDK Base64 (line break'siz) ile yazılıyor; ancak X509Certificate
       // text node'u Santuario `addKeyInfo` üzerinden geliyor ve MIME 76-char CRLF taşıyor.
       // Tüm imza subtree'sini standart LF wrap'ine normalize et.
+      rewrapBase64InSignatureSubtree(document.getDocumentElement());
+      return serialise(document);
+    }
+  }
+
+  /**
+   * {@code doXadesBesSignNative} ve {@code doXadesBesSignSoftware} tarafından paylaşılan XAdES-BES
+   * DOM iskeletini kurar: enveloped + SignedProperties Reference'ları, KeyInfo (X509Data +
+   * KeyValue) ve {@code Object/QualifyingProperties/SignedProperties}. İmza değeri ({@code
+   * SignatureValue}) <b>henüz</b> yazılmaz; çağıran ya yazılım digest + native {@code C_Sign}
+   * (PKCS#11) ya da {@code santSig.sign(privateKey)} (software PFX) ile doldurur.
+   */
+  org.apache.xml.security.signature.XMLSignature buildXadesBesSkeleton(
+      Document document,
+      X509Certificate signingCert,
+      String sigUrl,
+      String digestUrl,
+      String c14nUrl)
+      throws Exception {
+    Element root = document.getDocumentElement();
+
+    String sigId =
+        "MerselSig-" + UUID.randomUUID().toString().replaceAll("-", "").substring(0, 12);
+    String objectId = "Object-Id-" + UUID.randomUUID();
+    String signedPropsId = "Signed-Properties-Id-" + UUID.randomUUID();
+    String signedPropsRefId = "Reference-Id-" + UUID.randomUUID();
+    String envelopedRefId = "Reference-Id-" + UUID.randomUUID();
+
+    org.apache.xml.security.signature.XMLSignature santSig =
+        new org.apache.xml.security.signature.XMLSignature(document, "", sigUrl, c14nUrl);
+    santSig.setId(sigId);
+    root.appendChild(santSig.getElement());
+
+    // Reference 1: URI="" with EnvelopedSignatureTransform
+    Transforms tfsEnveloped = new Transforms(document);
+    tfsEnveloped.addTransform(Transforms.TRANSFORM_ENVELOPED_SIGNATURE);
+    santSig.addDocument("", tfsEnveloped, digestUrl, envelopedRefId, null);
+
+    // Reference 2: URI="#signedPropsId" with c14n transform; Type = SignedProperties
+    Transforms tfsSp = new Transforms(document);
+    tfsSp.addTransform(Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS);
+    santSig.addDocument(
+        "#" + signedPropsId, tfsSp, digestUrl, signedPropsRefId, XADES_TYPE_SIGNED_PROPERTIES);
+
+    // KeyInfo: <ds:X509Data><ds:X509Certificate> +
+    // <ds:KeyValue><ds:RSAKeyValue|dsig11:ECKeyValue>
+    // Santuario `KeyInfo.add(PublicKey)` instanceof dispatch ile RSAKeyValue / ECKeyValue üretir.
+    santSig.addKeyInfo(signingCert);
+    santSig.addKeyInfo(signingCert.getPublicKey());
+
+    // Object/QualifyingProperties/SignedProperties (counter-sig path'iyle aynı şablon)
+    ObjectContainer obj = new ObjectContainer(document);
+    obj.setId(objectId);
+    Element qualifyingProps = buildQualifyingProperties(document, sigId, signedPropsId);
+    Element signedPropsEl = (Element) qualifyingProps.getFirstChild();
+    populateSignedProperties(document, signedPropsEl, signingCert, digestUrl);
+    obj.getElement().appendChild(qualifyingProps);
+    santSig.appendObject(obj);
+
+    return santSig;
+  }
+
+  /* ================================================================== */
+  /* XAdES-BES software (PKCS#12 / PFX) sign path                        */
+  /* ================================================================== */
+
+  /**
+   * Sanal PKCS#12 (PFX) kartı için XAdES-BES enveloped imza üretir. PKCS#11 native yoluyla
+   * <b>bire bir aynı</b> DOM iskeletini ({@link #buildXadesBesSkeleton}) kullanır; tek fark imza
+   * değerini Apache Santuario'nun {@code XMLSignature.sign(PrivateKey)} çağrısının yazılım anahtarı
+   * ile üretmesidir (ECDSA için R||S kodlaması dahil). Kart firmware'ine özgü raw-only / PSS
+   * patolojileri yazılım yolunda oluşmaz.
+   *
+   * @param identifier sertifika seçici (alias / X.509 serial / SHA-1 thumbprint)
+   */
+  byte[] doXadesBesSignSoftware(
+      byte[] xmlBytes,
+      io.mersel.dss.agent.api.services.virtualtoken.VirtualToken token,
+      String identifier,
+      SignatureDiagnostics diag)
+      throws Exception {
+    BouncyCastleSetup.ensureRegistered();
+    Init.init();
+
+    try (Pkcs11Session session =
+        Pkcs11Session.forPkcs12(token.getKeyStore(), token.passwordString())) {
+      String alias = session.resolveAlias(identifier);
+      PrivateKey privateKey = session.getPrivateKey(alias);
+      Certificate[] rawChain = session.getCertificateChain(alias);
+      X509Certificate signingCert = (X509Certificate) rawChain[0];
+      boolean ec = isEcdsa(signingCert);
+
+      String c14nUrl = Transforms.TRANSFORM_C14N_EXCL_OMIT_COMMENTS;
+      String digestUrl = ec ? DIGEST_SHA384 : DigestMethod.SHA256;
+      String sigUrl = ec ? SIG_ECDSA_SHA384 : SIG_RSA_SHA256;
+
+      diag.setKeyAlgorithm(ec ? "EC" : "RSA");
+      try {
+        diag.setKeySize(estimateKeySizeBits(signingCert));
+      } catch (RuntimeException ignore) {
+        /* tanılama best-effort */
+      }
+      diag.setAttemptedSignatureAlgorithm(sigUrl);
+      diag.setResolvedJcaSignature(ec ? "SHA384withECDSA" : "SHA256withRSA");
+      diag.setFallbackStrategy("software-pkcs12-pfx");
+      mergeWarning(
+          diag, "İmza, yazılım PKCS#12 (PFX) anahtarı ile atıldı (akıllı kart kullanılmadı).");
+
+      Document document = parseXml(xmlBytes);
+      org.apache.xml.security.signature.XMLSignature santSig =
+          buildXadesBesSkeleton(document, signingCert, sigUrl, digestUrl, c14nUrl);
+
+      // Santuario SignedInfo digest'lerini hesaplar + yazılım anahtarıyla imzalar (EC → R||S).
+      santSig.sign(privateKey);
+
+      NodeList svList = santSig.getElement().getElementsByTagNameNS(DS_NS, "SignatureValue");
+      if (svList.getLength() > 0) {
+        ((Element) svList.item(0))
+            .setAttribute("Id", "Signature-Value-Id-" + UUID.randomUUID());
+      }
       rewrapBase64InSignatureSubtree(document.getDocumentElement());
       return serialise(document);
     }

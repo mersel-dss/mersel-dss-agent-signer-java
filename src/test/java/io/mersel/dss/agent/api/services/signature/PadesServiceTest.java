@@ -242,7 +242,8 @@ class PadesServiceTest {
     PadesService service =
         new PadesService(
             null,
-            io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder.passthrough());
+            io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder.passthrough(),
+            new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
 
     try (Pkcs11Session session = loaded.openSession()) {
       service.signWithSession(session, dto, signedOut);

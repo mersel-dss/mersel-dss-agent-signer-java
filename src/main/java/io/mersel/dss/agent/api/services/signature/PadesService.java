@@ -52,6 +52,8 @@ import io.mersel.dss.agent.api.services.certificate.CertificateChainBuilder;
 import io.mersel.dss.agent.api.services.keystore.BouncyCastleSetup;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11Session;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardManager;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualToken;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry;
 
 /**
  * PDF belgelerini PAdES-B (CADES) ile imzalar. iText 7 (PdfSigner) + manuel CMS (BouncyCastle)
@@ -122,10 +124,15 @@ public class PadesService {
 
   private final SmartCardManager cardManager;
   private final CertificateChainBuilder chainBuilder;
+  private final VirtualTokenRegistry virtualTokenRegistry;
 
-  public PadesService(SmartCardManager cardManager, CertificateChainBuilder chainBuilder) {
+  public PadesService(
+      SmartCardManager cardManager,
+      CertificateChainBuilder chainBuilder,
+      VirtualTokenRegistry virtualTokenRegistry) {
     this.cardManager = cardManager;
     this.chainBuilder = chainBuilder;
+    this.virtualTokenRegistry = virtualTokenRegistry;
   }
 
   /** Tek-girişli high-level uç: lib çözümler, oturum açar, imzalar, kapatır. */
@@ -133,6 +140,23 @@ public class PadesService {
     if (dto == null || dto.getContent() == null) {
       throw new IllegalArgumentException("İmzalanacak içerik boş.");
     }
+
+    // Sanal PKCS#12 (PFX) kartı: yazılım keystore üzerinden imzala (PIN yerine kayıtlı parola).
+    VirtualToken virtual = virtualTokenRegistry.find(dto.getTerminalName());
+    if (virtual != null && virtual.isPkcs12()) {
+      log.info(
+          "PAdES imzalama (sanal PFX kartı): terminal={}, certId={}, appendMode={}",
+          dto.getTerminalName(),
+          dto.getCertificateId(),
+          Boolean.TRUE.equals(dto.getAppendMode()));
+      try (Pkcs11Session session =
+          Pkcs11Session.forPkcs12(virtual.getKeyStore(), virtual.passwordString())) {
+        signWithSession(session, dto, signedOut);
+      }
+      return;
+    }
+
+    // Fiziksel kart veya sanal PKCS#11 (lib yolu resolver tarafından registry'den çözülür).
     Path libraryPath =
         cardManager.resolveLibrary(dto.getTerminalName(), dto.getPkcs11LibraryPath());
     log.info(

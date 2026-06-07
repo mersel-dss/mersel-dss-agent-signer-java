@@ -76,7 +76,9 @@ class XadesServiceDispatchTest {
     Mockito.when(cm.resolveLibrary(Mockito.anyString(), Mockito.isNull())).thenReturn(libPath);
     CertificateChainBuilder cb = Mockito.mock(CertificateChainBuilder.class);
     SmartCardReaderService rs = Mockito.mock(SmartCardReaderService.class);
-    return Mockito.spy(new XadesService(cm, cb, rs));
+    return Mockito.spy(
+        new XadesService(
+            cm, cb, rs, new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry()));
   }
 
   @Test

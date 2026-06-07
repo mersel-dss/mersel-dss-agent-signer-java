@@ -53,7 +53,12 @@ class SmartCardManagerTest {
       CardTypeRegistry registry,
       Pkcs11LibraryResolver resolver,
       Pkcs11ModuleProbe probe) {
-    return new SmartCardManager(reader, registry, resolver, probe);
+    return new SmartCardManager(
+        reader,
+        registry,
+        resolver,
+        probe,
+        new io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry());
   }
 
   /** ATR ile kart tipi algılansın ama sürücü diskte yok → zenginleştirilmiş hata. */

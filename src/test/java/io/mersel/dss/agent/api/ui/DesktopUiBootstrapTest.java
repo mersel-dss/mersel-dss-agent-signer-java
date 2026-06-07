@@ -38,6 +38,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import io.mersel.dss.agent.api.config.SignerProperties;
 import io.mersel.dss.agent.api.services.update.UpdateGate;
 import io.mersel.dss.agent.api.services.update.UpdateService;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry;
 
 /**
  * {@link DesktopUiBootstrap} smoke test — Spring context'i kaldırmadan bootstrap akışının headless
@@ -83,7 +84,8 @@ class DesktopUiBootstrapTest {
     UpdateGate gate = new UpdateGate(props);
 
     DesktopUiBootstrap boot =
-        new DesktopUiBootstrap(props, updateService, gate, null, 15212, "127.0.0.1", "/");
+        new DesktopUiBootstrap(
+            props, updateService, gate, null, new VirtualTokenRegistry(), 15212, "127.0.0.1", "/");
 
     ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
     assertDoesNotThrow(() -> boot.onApplicationReady(event));
@@ -100,7 +102,8 @@ class DesktopUiBootstrapTest {
     UpdateService updateService = mock(UpdateService.class);
     UpdateGate gate = new UpdateGate(props);
     DesktopUiBootstrap boot =
-        new DesktopUiBootstrap(props, updateService, gate, null, 15212, "127.0.0.1", "/");
+        new DesktopUiBootstrap(
+            props, updateService, gate, null, new VirtualTokenRegistry(), 15212, "127.0.0.1", "/");
 
     ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
     assertDoesNotThrow(() -> boot.onApplicationReady(event));

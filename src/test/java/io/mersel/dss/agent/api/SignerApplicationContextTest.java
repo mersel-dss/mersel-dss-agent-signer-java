@@ -60,7 +60,9 @@ import io.mersel.dss.agent.api.services.update.UpdateService;
     properties = {
       "mersel.signer.ui.enabled=false",
       "mersel.signer.update.enabled=false",
-      "mersel.signer.update.check-on-startup=false"
+      "mersel.signer.update.check-on-startup=false",
+      // Kalıcı sanal kart deposunu gerçek kullanıcı dizinine değil build klasörüne yönlendir.
+      "mersel.signer.virtual-cards.dir=target/test-virtual-cards"
     })
 class SignerApplicationContextTest {
 

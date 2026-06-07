@@ -38,6 +38,8 @@ import io.mersel.dss.agent.api.exceptions.Pkcs11LibraryNotFoundException;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11LibraryResolver;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11LibraryResolver.ResolutionResult;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11VendorHints;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualToken;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry;
 
 /**
  * Yüksek seviyeli "kullanıcı bana terminal adı verdi, ben de imzalamak için gereken her şeyi (kart
@@ -68,16 +70,19 @@ public class SmartCardManager {
   private final CardTypeRegistry registry;
   private final Pkcs11LibraryResolver libraryResolver;
   private final Pkcs11ModuleProbe moduleProbe;
+  private final VirtualTokenRegistry virtualTokenRegistry;
 
   public SmartCardManager(
       SmartCardReaderService readerService,
       CardTypeRegistry registry,
       Pkcs11LibraryResolver libraryResolver,
-      Pkcs11ModuleProbe moduleProbe) {
+      Pkcs11ModuleProbe moduleProbe,
+      VirtualTokenRegistry virtualTokenRegistry) {
     this.readerService = readerService;
     this.registry = registry;
     this.libraryResolver = libraryResolver;
     this.moduleProbe = moduleProbe;
+    this.virtualTokenRegistry = virtualTokenRegistry;
   }
 
   /** İki-argümanlı kısayol; manual cardType override'ı verilmediği durumlar için. */
@@ -98,6 +103,20 @@ public class SmartCardManager {
    */
   public Path resolveLibrary(
       String terminalName, String pkcs11LibraryPath, String cardTypeOverride) {
+    // Sanal PKCS#11 kartı (Dummy Card): terminalName registry'de tanımlıysa ve çağıran lib yolu
+    // vermediyse, kayıtlı kütüphane yolunu kullan. Fiziksel kart / ATR algılaması atlanır; aşağıdaki
+    // resolver explicit path'i diskte çözer.
+    if (StringUtils.isBlank(pkcs11LibraryPath) && virtualTokenRegistry != null) {
+      VirtualToken vt = virtualTokenRegistry.find(terminalName);
+      if (vt != null && vt.isPkcs11()) {
+        pkcs11LibraryPath = vt.getPkcs11LibraryPath();
+        log.debug(
+            "Sanal PKCS#11 token '{}' için kayıtlı lib yolu kullanılıyor: {}",
+            terminalName,
+            pkcs11LibraryPath);
+      }
+    }
+
     CardType resolvedType = null;
     String how = null;
 

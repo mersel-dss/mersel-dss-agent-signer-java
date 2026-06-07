@@ -55,6 +55,7 @@ import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.PasswordCallback;
 import javax.security.auth.login.LoginException;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -270,6 +271,29 @@ public final class Pkcs11Session implements AutoCloseable {
     if (provider == null) throw new IllegalArgumentException("provider null olamaz.");
     char[] pinChars = pin == null ? new char[0] : pin.toCharArray();
     String name = "merselSignerTest-" + SEQ.incrementAndGet();
+    return new Pkcs11Session(provider, keyStore, null, name, pinChars, false);
+  }
+
+  /**
+   * Sanal PKCS#12 (PFX) kartı için yazılım oturumu açar: BouncyCastle provider'ı garanti edilir ve
+   * yüklenmiş keystore bu provider üzerinden imzalama için sarmalanır. {@link #close()} BC'yi
+   * kaldırmaz (global, paylaşımlı provider).
+   *
+   * @param keyStore parolası önceden doğrulanmış PKCS#12 keystore
+   * @param password keystore / key parolası
+   */
+  public static Pkcs11Session forPkcs12(KeyStore keyStore, String password) {
+    if (keyStore == null) {
+      throw new IllegalArgumentException("keyStore null olamaz.");
+    }
+    BouncyCastleSetup.ensureRegistered();
+    Provider provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME);
+    if (provider == null) {
+      throw new Pkcs11LibraryException(
+          "BouncyCastle provider bulunamadı; PFX imzalama için gerekli.");
+    }
+    char[] pinChars = password == null ? new char[0] : password.toCharArray();
+    String name = "merselPfxSigner-" + SEQ.incrementAndGet();
     return new Pkcs11Session(provider, keyStore, null, name, pinChars, false);
   }
 

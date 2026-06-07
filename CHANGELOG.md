@@ -8,6 +8,31 @@ standardına dayanır; sürüm numaralandırması
 
 ### Added
 
+- **Sanal Kart ("Dummy Card") — kart takılı olmadan PFX/PKCS#11 ile imza.**
+  Kullanıcı fiziksel akıllı kart olmadan bir **PKCS#12 (PFX) dosyası** ya da
+  **PKCS#11 (HSM / yüklü sürücü)** tanımlayabilir; bu tanım `GET /smartcard`
+  listesinde normal bir kart gibi görünür, sertifikaları listelenir ve onunla
+  PAdES / XAdES-BES / XAdES counter-signature imzaları atılabilir. Mevcut imza
+  ve listeleme uçlarının imzası/parametreleri **değişmedi**; yönlendirme yalnızca
+  `terminalName` kayıtlı bir sanal karta eşleştiğinde devreye girer, fiziksel
+  kart akışı birebir korunur.
+  - **Yeni uçlar**: `POST /smartcard/virtual/pkcs11`, `POST /smartcard/virtual/pkcs12`
+    (multipart PFX + parola), `GET /smartcard/virtual`, `DELETE /smartcard/virtual/{name}`.
+  - **Masaüstü diyaloğu**: ana pencereye **"Sanal Kart Tanımla"** butonu; PFX/PKCS#11
+    seçimi, **native dosya seçici** (`FileDialog`, `JFileChooser` fallback'li),
+    tanımlı kartları listeleme, **seçili kartı düzenleme** ve silme. Diyalog backend
+    ile `VirtualCardActions` portu üzerinden konuşur; REST controller ile **aynı**
+    bellek-içi registry'yi paylaşır.
+  - **Kalıcılık**: tanımlar işletim sistemi kullanıcı dizininde saklanır
+    (`~/.mersel-dss/virtual-cards/`); agent yeniden başlatıldığında otomatik geri
+    yüklenir. PFX baytları yerel kopyalanır, **parola AES-GCM ile makineye özel bir
+    anahtar (`.secret.key`) altında şifrelenerek** yazılır; POSIX sistemlerde
+    dizin/dosyalar yalnız sahip erişimine kısıtlanır. Dizin
+    `mersel.signer.virtual-cards.dir` ile değiştirilebilir; depo hazırlanamazsa
+    özellik bellek-içi moda düşer.
+  - **PIN doğrulama**: PKCS#12 sanal kartta C_Login/PIN kavramı olmadığından
+    `POST /smartcard/pin/validate` doğrudan geçerli kabul eder (parola kart tanımında
+    doğrulanır); PKCS#11 sanal kart normal C_Login yolundan geçer.
 - **Başlatma hatası ekranı (`StartupErrorWindow`)** — açılış başarısız olduğunda
   splash'in yerini alan, splash ile aynı koyu paleti paylaşan ama danger (kırmızı)
   accent'li bir hata penceresi. Anlaşılır başlık + açıklama + kaydırılabilir

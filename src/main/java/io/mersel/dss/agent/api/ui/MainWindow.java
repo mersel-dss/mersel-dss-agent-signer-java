@@ -142,6 +142,9 @@ public final class MainWindow {
   private final String healthUrl;
   private final Runnable onExitRequest;
   private final Runnable openDiagnosticsPanel;
+  // Sanal kart (Dummy Card) tanımlama portu. null ise pencerede "Sanal Kart Tanımla" butonu
+  // render edilmez (graceful degradation; backend registry enjekte edilmemiş yapılandırmalar).
+  private final transient VirtualCardActions virtualCardActions;
 
   private JFrame frame;
   // Center panel'in container'ı + içeriği — applyUpdateState çağrıldığında center temizlenip
@@ -152,9 +155,8 @@ public final class MainWindow {
   private UpdateInfo pendingUpdate;
 
   /**
-   * Tanılama panel callback'i ile genişletilmiş kurucu. {@code openDiagnosticsPanel} null ise
-   * "Tanılama paneli" butonu render edilmez (graceful degradation; recorder devre dışı
-   * yapılandırmalar için).
+   * Geriye dönük uyumluluk kurucusu — sanal kart portu olmadan. {@code openDiagnosticsPanel} null
+   * ise "Tanılama paneli" butonu render edilmez.
    */
   public MainWindow(
       String version,
@@ -162,12 +164,28 @@ public final class MainWindow {
       String healthUrl,
       Runnable onExitRequest,
       Runnable openDiagnosticsPanel) {
+    this(version, openUrl, healthUrl, onExitRequest, openDiagnosticsPanel, null);
+  }
+
+  /**
+   * Tanılama panel callback'i + sanal kart portu ile genişletilmiş kurucu. {@code
+   * openDiagnosticsPanel} null ise "Tanılama paneli" butonu, {@code virtualCardActions} null ise
+   * "Sanal Kart Tanımla" butonu render edilmez (graceful degradation).
+   */
+  public MainWindow(
+      String version,
+      String openUrl,
+      String healthUrl,
+      Runnable onExitRequest,
+      Runnable openDiagnosticsPanel,
+      VirtualCardActions virtualCardActions) {
     this.version = safe(version);
     this.openUrl = openUrl == null ? "" : openUrl;
     this.healthUrl = healthUrl == null ? "" : healthUrl;
     // Default: System.exit(0). Bootstrap, tray cleanup'ı kendi handler'ında yapar.
     this.onExitRequest = onExitRequest != null ? onExitRequest : () -> System.exit(0);
     this.openDiagnosticsPanel = openDiagnosticsPanel;
+    this.virtualCardActions = virtualCardActions;
   }
 
   /** Pencereyi EDT üzerinde gösterir; çağıran thread bloklanmaz. */
@@ -397,10 +415,43 @@ public final class MainWindow {
     }
 
     center.add(statusCard);
+    JPanel virtualCardRow = buildVirtualCardRow();
+    if (virtualCardRow != null) {
+      center.add(Box.createVerticalStrut(16));
+      center.add(virtualCardRow);
+    }
     center.add(Box.createVerticalStrut(20));
     center.add(buildDeveloperToolsRow());
 
     return center;
+  }
+
+  /**
+   * "Sanal Kart Tanımla" eylem satırı — kart takılı olmasa bile PFX (PKCS#12) veya PKCS#11
+   * sürücüsü üzerinden Dummy Card tanımlamayı sağlar. {@link #virtualCardActions} null ise (port
+   * enjekte edilmemiş) {@code null} döner ve satır hiç render edilmez.
+   */
+  private JPanel buildVirtualCardRow() {
+    if (virtualCardActions == null) {
+      return null;
+    }
+    JPanel row = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+    row.setOpaque(false);
+    row.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+    JButton button = linkButton("Sanal Kart Tanımla (PFX / PKCS#11)");
+    button.setToolTipText(
+        "Kart takılı olmasa bile PFX dosyası ya da PKCS#11 sürücüsünü Dummy Card olarak tanımla.");
+    button.addActionListener(e -> openVirtualCardDialog());
+    row.add(button);
+    return row;
+  }
+
+  private void openVirtualCardDialog() {
+    if (virtualCardActions == null) {
+      return;
+    }
+    VirtualCardDialog.open(frame, virtualCardActions);
   }
 
   /**

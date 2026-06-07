@@ -27,6 +27,8 @@
 package io.mersel.dss.agent.api.services.certificate;
 
 import java.nio.file.Path;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -36,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.OptionalLong;
 
@@ -54,10 +57,12 @@ import io.mersel.dss.agent.api.models.CertificateResponse;
 import io.mersel.dss.agent.api.models.CertificateStatusResponse;
 import io.mersel.dss.agent.api.models.enums.CertificatePurpose;
 import io.mersel.dss.agent.api.models.enums.TurkishCertificatePolicy;
+import io.mersel.dss.agent.api.exceptions.CertificateLookupException;
 import io.mersel.dss.agent.api.services.keystore.IaikPkcs11Signer;
 import io.mersel.dss.agent.api.services.keystore.Pkcs11PublicCertificateReader;
 import io.mersel.dss.agent.api.services.keystore.TokenCertificate;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardManager;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualToken;
 
 /**
  * Verilen terminaldeki karta <b>PIN'siz</b> bağlanır, X.509 sertifikalarını {@link
@@ -130,6 +135,82 @@ public class CertificateListingService {
       result.add(toResponse(tc, chain));
     }
     return annotateRecommendation(result);
+  }
+
+  /**
+   * Sanal kart ("Dummy Card") için sertifikaları listeler. PKCS#11 sanal kartta lib yolu doğrudan
+   * verilerek mevcut PIN'siz okuma yolu kullanılır; PKCS#12 (PFX) sanal kartta yüklenmiş software
+   * keystore üzerinden alias'lar gezilir, zincir keystore'dan alınır ve aynı {@code toResponse} +
+   * {@code annotateRecommendation} işlenir.
+   */
+  public List<CertificateResponse> listFromVirtual(VirtualToken token) {
+    if (token == null) {
+      throw new IllegalArgumentException("token null olamaz.");
+    }
+    if (token.isPkcs11()) {
+      return listCertificates(token.getName(), token.getPkcs11LibraryPath(), null);
+    }
+    return listFromPkcs12(token);
+  }
+
+  private List<CertificateResponse> listFromPkcs12(VirtualToken token) {
+    KeyStore ks = token.getKeyStore();
+    char[] pw = token.passwordChars();
+    List<CertificateResponse> result = new ArrayList<CertificateResponse>();
+    try {
+      Enumeration<String> aliases = ks.aliases();
+      while (aliases.hasMoreElements()) {
+        String alias = aliases.nextElement();
+        Certificate leaf;
+        try {
+          if (!ks.isKeyEntry(alias)) {
+            continue; // yalnız imza için private key taşıyan girişleri göster
+          }
+          leaf = ks.getCertificate(alias);
+        } catch (Exception perAlias) {
+          log.debug("PFX alias '{}' okunamadı: {}", alias, perAlias.getMessage());
+          continue;
+        }
+        if (!(leaf instanceof X509Certificate)) {
+          continue;
+        }
+        X509Certificate[] chain = pkcs12Chain(ks, alias, (X509Certificate) leaf);
+        result.add(toResponse(new TokenCertificate(alias, (X509Certificate) leaf), chain));
+      }
+    } catch (RuntimeException re) {
+      throw re;
+    } catch (Exception e) {
+      throw new CertificateLookupException(
+          "PFX sertifikaları listelenemedi: " + e.getMessage(), e);
+    } finally {
+      java.util.Arrays.fill(pw, '\0');
+    }
+    if (result.isEmpty()) {
+      throw new CertificateLookupException("PFX içinde sertifika bulunamadı.");
+    }
+    return annotateRecommendation(result);
+  }
+
+  /** PKCS#12 keystore'dan alias zincirini X.509 dizisine çevirir; yoksa tek leaf döner. */
+  private static X509Certificate[] pkcs12Chain(
+      KeyStore ks, String alias, X509Certificate leaf) {
+    try {
+      Certificate[] chain = ks.getCertificateChain(alias);
+      if (chain != null && chain.length > 0) {
+        List<X509Certificate> out = new ArrayList<X509Certificate>(chain.length);
+        for (Certificate c : chain) {
+          if (c instanceof X509Certificate) {
+            out.add((X509Certificate) c);
+          }
+        }
+        if (!out.isEmpty()) {
+          return out.toArray(new X509Certificate[0]);
+        }
+      }
+    } catch (Exception e) {
+      log.debug("PFX alias '{}' zinciri alınamadı: {}", alias, e.getMessage());
+    }
+    return new X509Certificate[] {leaf};
   }
 
   /**

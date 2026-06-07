@@ -47,6 +47,15 @@ public class SmartCardDetail {
   @Schema(description = "PKCS#11 kütüphanesinin diske çözümlenmiş yolu.")
   private String pkcs11LibraryPath;
 
+  @Schema(
+      description =
+          "Bu kart fiziksel bir okuyucu yerine kullanıcı tanımlı bir sanal kart (PKCS#11/PKCS#12)"
+              + " mı? Fiziksel kartlarda false.")
+  private boolean virtual;
+
+  @Schema(description = "Sanal kart kaynağı: PKCS11 | PKCS12. Fiziksel kartlarda null.")
+  private String source;
+
   public SmartCardDetail() {}
 
   public String getTerminalName() {
@@ -87,5 +96,21 @@ public class SmartCardDetail {
 
   public void setPkcs11LibraryPath(String pkcs11LibraryPath) {
     this.pkcs11LibraryPath = pkcs11LibraryPath;
+  }
+
+  public boolean isVirtual() {
+    return virtual;
+  }
+
+  public void setVirtual(boolean virtual) {
+    this.virtual = virtual;
+  }
+
+  public String getSource() {
+    return source;
+  }
+
+  public void setSource(String source) {
+    this.source = source;
   }
 }

@@ -55,12 +55,27 @@ public final class MainWindowLifecycle {
       String healthUrl,
       Runnable onExitRequest,
       Runnable openDiagnosticsPanel) {
+    show(version, openUrl, healthUrl, onExitRequest, openDiagnosticsPanel, null);
+  }
+
+  /**
+   * Ana pencereyi sanal kart portu ile gösterir. {@code virtualCardActions} null ise "Sanal Kart
+   * Tanımla" butonu pencerede görünmez.
+   */
+  public static synchronized void show(
+      String version,
+      String openUrl,
+      String healthUrl,
+      Runnable onExitRequest,
+      Runnable openDiagnosticsPanel,
+      VirtualCardActions virtualCardActions) {
     if (current != null) {
       current.bringToFront();
       return;
     }
     MainWindow window =
-        new MainWindow(version, openUrl, healthUrl, onExitRequest, openDiagnosticsPanel);
+        new MainWindow(
+            version, openUrl, healthUrl, onExitRequest, openDiagnosticsPanel, virtualCardActions);
     window.show();
     current = window;
     // Pencere kalkmadan önce gelen update sinyali varsa burada apply et — DesktopUiBootstrap

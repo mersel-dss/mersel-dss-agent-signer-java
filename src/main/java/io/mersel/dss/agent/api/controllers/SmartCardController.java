@@ -55,6 +55,8 @@ import io.mersel.dss.agent.api.services.smartcard.PcscDiagnostics;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardInfo;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardPinValidator;
 import io.mersel.dss.agent.api.services.smartcard.SmartCardReaderService;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualToken;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -68,17 +70,20 @@ public class SmartCardController {
   private final CertificateListingService certificateListingService;
   private final SmartCardPinValidator pinValidator;
   private final MechanismCapabilityService mechanismCapabilityService;
+  private final VirtualTokenRegistry virtualTokenRegistry;
 
   @org.springframework.beans.factory.annotation.Autowired
   public SmartCardController(
       SmartCardReaderService readerService,
       CertificateListingService certificateListingService,
       SmartCardPinValidator pinValidator,
-      MechanismCapabilityService mechanismCapabilityService) {
+      MechanismCapabilityService mechanismCapabilityService,
+      VirtualTokenRegistry virtualTokenRegistry) {
     this.readerService = readerService;
     this.certificateListingService = certificateListingService;
     this.pinValidator = pinValidator;
     this.mechanismCapabilityService = mechanismCapabilityService;
+    this.virtualTokenRegistry = virtualTokenRegistry;
   }
 
   @Operation(
@@ -98,6 +103,18 @@ public class SmartCardController {
         if (!info.getCardType().getLibraries().isEmpty()) {
           d.setPkcs11Library(info.getCardType().getLibraries().get(0));
         }
+      }
+      details.add(d);
+    }
+    // Fiziksel kartların ardına kullanıcının tanımladığı sanal kartları (Dummy Card) ekle.
+    for (VirtualToken token : virtualTokenRegistry.list()) {
+      SmartCardDetail d = new SmartCardDetail();
+      d.setTerminalName(token.getName());
+      d.setCardType(token.getDisplayCardType());
+      d.setVirtual(true);
+      d.setSource(token.getSourceType());
+      if (token.isPkcs11()) {
+        d.setPkcs11LibraryPath(token.getPkcs11LibraryPath());
       }
       details.add(d);
     }
@@ -201,8 +218,11 @@ public class SmartCardController {
           @RequestParam(value = "eligibleOnly", required = false, defaultValue = "true")
           boolean eligibleOnly) {
 
+    VirtualToken virtual = virtualTokenRegistry.find(terminalName);
     List<CertificateResponse> certs =
-        certificateListingService.listCertificates(terminalName, pkcs11LibraryPath, cardType);
+        virtual != null
+            ? certificateListingService.listFromVirtual(virtual)
+            : certificateListingService.listCertificates(terminalName, pkcs11LibraryPath, cardType);
     return ResponseEntity.ok(applyFilters(certs, purposeFilter, eligibleOnly));
   }
 
@@ -230,6 +250,16 @@ public class SmartCardController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<PinValidationResponse> validatePin(
       @Valid @RequestBody ValidatePinDto body) {
+    // PKCS#12 (PFX) sanal kartta C_Login/PIN kavramı yoktur; parola kart tanımı sırasında
+    // doğrulanıp bellekte tutulur. Bu yüzden PIN doğrulama anında geçerli kabul edilir
+    // (frontend giriş akışı bozulmasın). PKCS#11 sanal kart ise gerçek sürücüye sahip olduğundan
+    // normal C_Login yolundan geçer (resolveLibrary registry-aware).
+    VirtualToken virtual = virtualTokenRegistry.find(body.getTerminalName());
+    if (virtual != null && virtual.isPkcs12()) {
+      return ResponseEntity.ok(
+          new PinValidationResponse(
+              true, body.getTerminalName(), virtual.getDisplayCardType(), null));
+    }
     SmartCardPinValidator.ValidationResult result =
         pinValidator.validate(
             body.getTerminalName(), body.getPin(), body.getPkcs11LibraryPath(), body.getCardType());

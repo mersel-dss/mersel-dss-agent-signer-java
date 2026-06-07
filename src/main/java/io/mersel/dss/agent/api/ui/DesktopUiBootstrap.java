@@ -46,6 +46,8 @@ import io.mersel.dss.agent.api.services.diagnostics.TraceRecorder;
 import io.mersel.dss.agent.api.services.update.UpdateGate;
 import io.mersel.dss.agent.api.services.update.UpdateInfo;
 import io.mersel.dss.agent.api.services.update.UpdateService;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualToken;
+import io.mersel.dss.agent.api.services.virtualtoken.VirtualTokenRegistry;
 
 /**
  * Spring Boot tam ayağa kalktığında ({@link ApplicationReadyEvent}) tetiklenir:
@@ -72,6 +74,7 @@ public class DesktopUiBootstrap {
   private final UpdateService updateService;
   private final UpdateGate updateGate;
   private final TraceRecorder traceRecorder;
+  private final VirtualTokenRegistry virtualTokenRegistry;
   private final int serverPort;
   private final String serverAddress;
   private final String contextPath;
@@ -85,6 +88,7 @@ public class DesktopUiBootstrap {
       UpdateService updateService,
       UpdateGate updateGate,
       TraceRecorder traceRecorder,
+      VirtualTokenRegistry virtualTokenRegistry,
       @Value("${server.port:15212}") int serverPort,
       @Value("${server.address:127.0.0.1}") String serverAddress,
       @Value("${server.servlet.context-path:/}") String contextPath) {
@@ -92,6 +96,7 @@ public class DesktopUiBootstrap {
     this.updateService = updateService;
     this.updateGate = updateGate;
     this.traceRecorder = traceRecorder;
+    this.virtualTokenRegistry = virtualTokenRegistry;
     this.serverPort = serverPort;
     this.serverAddress = serverAddress;
     this.contextPath = contextPath;
@@ -179,7 +184,8 @@ public class DesktopUiBootstrap {
             }
             System.exit(0);
           },
-          buildDiagnosticsPanelOpener());
+          buildDiagnosticsPanelOpener(),
+          buildVirtualCardActions());
       return true;
     } catch (RuntimeException re) {
       LOG.warn("Ana pencere açılırken hata: {}", re.getMessage());
@@ -197,6 +203,44 @@ public class DesktopUiBootstrap {
       return null;
     }
     return () -> DiagnosticsPanel.showOrFocus(traceRecorder);
+  }
+
+  /**
+   * "Sanal Kart Tanımla" diyaloğunun backend portunu kurar. Diyalog {@code VirtualTokenRegistry}'yi
+   * doğrudan tanımaz; bu adaptör REST controller ile aynı bellek-içi registry'yi paylaşır, böylece
+   * pencereden tanımlanan kart {@code GET /smartcard} çıktısında da görünür. Registry enjekte
+   * edilmemişse {@code null} döner ve buton render edilmez.
+   */
+  private VirtualCardActions buildVirtualCardActions() {
+    if (virtualTokenRegistry == null) {
+      return null;
+    }
+    return new VirtualCardActions() {
+      @Override
+      public java.util.List<VirtualCardActions.View> list() {
+        java.util.List<VirtualCardActions.View> out = new java.util.ArrayList<>();
+        for (VirtualToken t : virtualTokenRegistry.list()) {
+          out.add(new VirtualCardActions.View(t.getName(), t.getDisplayCardType(), t.getSource()));
+        }
+        return out;
+      }
+
+      @Override
+      public void registerPkcs11(String name, String libraryPath) {
+        virtualTokenRegistry.registerPkcs11(name, libraryPath);
+      }
+
+      @Override
+      public void registerPkcs12(
+          String name, byte[] pfxBytes, char[] password, String sourceLabel) {
+        virtualTokenRegistry.registerPkcs12(name, pfxBytes, password, sourceLabel);
+      }
+
+      @Override
+      public void remove(String name) {
+        virtualTokenRegistry.remove(name);
+      }
+    };
   }
 
   /* ---------------- tray ---------------- */
