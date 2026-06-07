@@ -6,6 +6,22 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Changed
+
+- **Trace recorder gürültü filtresine kök (`/`), tanılama polling'i
+  (`/diagnostics/traces`) ve statik vendor varlıkları (`/vendor`) eklendi.**
+  Masaüstü tanılama paneli `GET /diagnostics/traces`'i periyodik poll'ladığı,
+  index sayfası `/`'a ve Scalar API-docs JS'i `/vendor/...`'a istek attığı için
+  bu üç path ring buffer'ı doldurup gerçek imza/listeleme trafiğinin kayıtlarını
+  ringden düşürüyordu. Artık varsayılan skip listesi:
+  `/, /actuator, /health, /ping, /favicon.ico, /error, /diagnostics/traces, /vendor`.
+  Kök `/` prefix olarak her path ile eşleşeceğinden, `shouldSkip` artık `/`'i
+  **yalnızca tam kök isteği** için eşler; `/sign/...`, `/diagnostics/sign-probe`
+  gibi alt path'ler kaydedilmeye devam eder. Liste
+  `MERSEL_AGENT_TRACE_RECORDER_SKIP` (CSV) veya
+  `mersel.signer.diagnostics.trace-recorder.skip-paths` ile override edilebilir;
+  `none` ya da boş bırakılırsa her şey kaydedilir (eski davranış).
+
 ## [1.1.5] — 2026-06-07
 
 ### Added

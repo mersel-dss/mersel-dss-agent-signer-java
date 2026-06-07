@@ -132,7 +132,15 @@ public class SignerProperties {
        */
       private List<String> skipPaths =
           new ArrayList<String>(
-              java.util.Arrays.asList("/actuator", "/health", "/ping", "/favicon.ico", "/error"));
+              java.util.Arrays.asList(
+                  "/",
+                  "/actuator",
+                  "/health",
+                  "/ping",
+                  "/favicon.ico",
+                  "/error",
+                  "/diagnostics/traces",
+                  "/vendor"));
 
       public boolean isEnabled() {
         return enabled;

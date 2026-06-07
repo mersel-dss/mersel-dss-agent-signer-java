@@ -101,7 +101,15 @@ public class TraceRecordingFilter extends OncePerRequestFilter {
    */
   static final List<String> DEFAULT_SKIP_PATHS =
       Collections.unmodifiableList(
-          Arrays.asList("/actuator", "/health", "/ping", "/favicon.ico", "/error"));
+          Arrays.asList(
+              "/",
+              "/actuator",
+              "/health",
+              "/ping",
+              "/favicon.ico",
+              "/error",
+              "/diagnostics/traces",
+              "/vendor"));
 
   private final TraceRecorder recorder;
   private final List<String> skipPathPrefixes;
@@ -152,6 +160,14 @@ public class TraceRecordingFilter extends OncePerRequestFilter {
       return false;
     }
     for (String prefix : skipPathPrefixes) {
+      // Kök "/" prefix olarak alınırsa HER path onunla başlar; sadece kökün KENDİSİ
+      // (ya da boş/"/"-only istek) skip edilsin, alt path'ler kaydedilmeye devam etsin.
+      if (prefix.equals("/")) {
+        if (path.equals("/") || path.isEmpty()) {
+          return true;
+        }
+        continue;
+      }
       if (path.equals(prefix) || path.startsWith(prefix + "/")) {
         return true;
       }

@@ -90,7 +90,7 @@ mersel:
         # Kapatmak için: "none" ya da boş bırakın → her şey kaydedilir.
         # Karşılaştırma case-sensitive prefix match (query string yok sayılır).
         # ----------------------------------------------------------------------
-        skip-paths: ${MERSEL_AGENT_TRACE_RECORDER_SKIP:/actuator,/health,/ping,/favicon.ico,/error}
+        skip-paths: ${MERSEL_AGENT_TRACE_RECORDER_SKIP:/,/actuator,/health,/ping,/favicon.ico,/error,/diagnostics/traces,/vendor}
 
     # ----------------------------------------------------------------------
     # Masaüstü UI (splash + ana pencere + system tray) ayarları

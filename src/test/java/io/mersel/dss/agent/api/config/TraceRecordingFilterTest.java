@@ -192,6 +192,23 @@ class TraceRecordingFilterTest {
   }
 
   @Test
+  void rootAndDiagnosticsTracesAreSkippedButSubPathsKept() {
+    TraceRecorder recorder = new TraceRecorder(true, 10);
+    TraceRecordingFilter filter = new TraceRecordingFilter(recorder);
+
+    // Kök ping + tanılama panelinin kendi polling'i gürültü; skip edilsin.
+    assertThat(filter.shouldSkip("/")).isTrue();
+    assertThat(filter.shouldSkip("/diagnostics/traces")).isTrue();
+    assertThat(filter.shouldSkip("/diagnostics/traces/")).isTrue();
+    assertThat(filter.shouldSkip("/vendor")).isTrue();
+    assertThat(filter.shouldSkip("/vendor/codemirror.js")).isTrue();
+
+    // "/" prefix'i diğer path'leri YANLIŞLIKLA yutmasın.
+    assertThat(filter.shouldSkip("/sign/xades")).isFalse();
+    assertThat(filter.shouldSkip("/diagnostics/sign-probe")).isFalse();
+  }
+
+  @Test
   void noneTokenInSkipListDisablesFiltering() throws Exception {
     TraceRecorder recorder = new TraceRecorder(true, 10);
     TraceRecordingFilter filter =
