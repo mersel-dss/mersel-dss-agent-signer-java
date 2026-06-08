@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.1.7] — 2026-06-08
+
 ### Added
 
 - **Zaman damgası (RFC 3161) desteği — TÜBİTAK ESYA / KamuSM dahil, kimlik
@@ -1733,7 +1735,8 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.6...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.7...HEAD
+[1.1.7]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.4-rc.1...v1.1.5
 [1.1.4-rc.1]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.3...v1.1.4-rc.1
