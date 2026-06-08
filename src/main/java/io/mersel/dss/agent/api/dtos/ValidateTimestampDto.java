@@ -30,7 +30,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Zaman damgası doğrulama isteği (multipart {@code @ModelAttribute}). Bu işlem TSA'ya bağlanmaz. */
+/**
+ * Zaman damgası doğrulama isteği (multipart {@code @ModelAttribute}). Bu işlem TSA'ya bağlanmaz.
+ */
 @Schema(description = "Zaman damgası doğrulama isteği")
 public class ValidateTimestampDto {
 

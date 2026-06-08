@@ -28,7 +28,10 @@ package io.mersel.dss.agent.api.dtos;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Zaman damgası alma yanıtı. Binary {@code .tst} token döndürülürken metadata HTTP header'larına da yazılır. */
+/**
+ * Zaman damgası alma yanıtı. Binary {@code .tst} token döndürülürken metadata HTTP header'larına da
+ * yazılır.
+ */
 @Schema(description = "Zaman damgası alma yanıtı")
 public class TimestampResponseDto {
 
@@ -38,7 +41,9 @@ public class TimestampResponseDto {
   @Schema(description = "Zaman damgası zamanı (ISO 8601)", example = "2026-06-08T14:30:00Z")
   private String timestamp;
 
-  @Schema(description = "TSA (Time Stamp Authority) bilgisi", example = "CN=TÜBİTAK ESYA TSS, O=TÜBİTAK, C=TR")
+  @Schema(
+      description = "TSA (Time Stamp Authority) bilgisi",
+      example = "CN=TÜBİTAK ESYA TSS, O=TÜBİTAK, C=TR")
   private String tsaName;
 
   @Schema(description = "Kullanılan hash algoritması", example = "SHA-256")

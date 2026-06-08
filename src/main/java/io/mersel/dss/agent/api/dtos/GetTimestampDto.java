@@ -41,7 +41,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Zaman damgası alma isteği")
 public class GetTimestampDto {
 
-  @Schema(description = "Zaman damgası alınacak dosya.", type = "string", format = "binary", required = true)
+  @Schema(
+      description = "Zaman damgası alınacak dosya.",
+      type = "string",
+      format = "binary",
+      required = true)
   private MultipartFile document;
 
   @Schema(
@@ -62,7 +66,8 @@ public class GetTimestampDto {
               + " standart TSA'larda HTTP Basic kullanıcı adı.")
   private String tsUserId;
 
-  @Schema(description = "TSA parolası. TÜBİTAK ESYA ve Basic-Auth'lı standart TSA'larda kullanılır.")
+  @Schema(
+      description = "TSA parolası. TÜBİTAK ESYA ve Basic-Auth'lı standart TSA'larda kullanılır.")
   private String tsUserPassword;
 
   @Schema(

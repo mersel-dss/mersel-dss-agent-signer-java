@@ -66,7 +66,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * saklanmaz.
  */
 @RestController
-@Tag(name = "Zaman Damgası", description = "RFC 3161 zaman damgası alma, doğrulama (TÜBİTAK ESYA dahil).")
+@Tag(
+    name = "Zaman Damgası",
+    description = "RFC 3161 zaman damgası alma, doğrulama (TÜBİTAK ESYA dahil).")
 public class TimestampController {
 
   private static final Logger log = LoggerFactory.getLogger(TimestampController.class);
@@ -122,7 +124,8 @@ public class TimestampController {
             documentBytes, dto.getHashAlgorithm(), provider, certReq, useNonce);
 
     byte[] tokenBytes = Base64.getDecoder().decode(response.getTimestampToken());
-    log.info("Zaman damgası alındı: {} byte, seri {}", tokenBytes.length, response.getSerialNumber());
+    log.info(
+        "Zaman damgası alındı: {} byte, seri {}", tokenBytes.length, response.getSerialNumber());
 
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_OCTET_STREAM)
@@ -164,7 +167,8 @@ public class TimestampController {
       @Parameter(hidden = true) @ModelAttribute ValidateTimestampDto dto) {
 
     if (dto.getTimestampToken() == null || dto.getTimestampToken().isEmpty()) {
-      throw new IllegalArgumentException("'timestampToken' (doğrulanacak token dosyası) zorunludur.");
+      throw new IllegalArgumentException(
+          "'timestampToken' (doğrulanacak token dosyası) zorunludur.");
     }
 
     byte[] tokenBytes = readBytes(dto.getTimestampToken());

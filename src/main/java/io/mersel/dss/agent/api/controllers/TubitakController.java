@@ -101,7 +101,8 @@ public class TubitakController {
             dto.getTsaUrl(), dto.getTsUserId(), dto.getTsUserPassword(), dto.getTubitak());
 
     TubitakCreditResponseDto creditInfo = tubitakCreditService.checkCredit(provider);
-    log.info("TÜBİTAK kontör sorgulaması başarılı. Kalan kontör: {}", creditInfo.getRemainingCredit());
+    log.info(
+        "TÜBİTAK kontör sorgulaması başarılı. Kalan kontör: {}", creditInfo.getRemainingCredit());
     return ResponseEntity.ok(creditInfo);
   }
 }

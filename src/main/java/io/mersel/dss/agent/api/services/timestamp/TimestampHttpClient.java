@@ -69,8 +69,7 @@ public class TimestampHttpClient {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TimestampHttpClient.class);
 
-  private static final MediaType TSQ_MEDIA_TYPE =
-      MediaType.parse("application/timestamp-query");
+  private static final MediaType TSQ_MEDIA_TYPE = MediaType.parse("application/timestamp-query");
 
   private static final String IDENTITY_HEADER = "identity";
   private static final String CREDIT_REQ_HEADER = "credit_req";
@@ -134,8 +133,7 @@ public class TimestampHttpClient {
       builder.addHeader(
           "Authorization",
           Credentials.basic(
-              provider.getUserId(),
-              provider.getPassword() == null ? "" : provider.getPassword()));
+              provider.getUserId(), provider.getPassword() == null ? "" : provider.getPassword()));
       LOGGER.debug("HTTP Basic Auth eklendi. Kullanıcı: {}", provider.getUserId());
     }
 
@@ -180,7 +178,10 @@ public class TimestampHttpClient {
       if (!response.isSuccessful()) {
         String detail = bytes.length > 0 && bytes.length < 512 ? new String(bytes).trim() : "";
         throw new TimestampException(
-            "TSA " + operation + " isteği başarısız: HTTP " + code
+            "TSA "
+                + operation
+                + " isteği başarısız: HTTP "
+                + code
                 + (detail.isEmpty() ? "" : " — " + detail));
       }
       return bytes;

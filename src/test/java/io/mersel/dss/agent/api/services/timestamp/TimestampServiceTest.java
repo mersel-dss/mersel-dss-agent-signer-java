@@ -62,7 +62,9 @@ class TimestampServiceTest {
         TimestampProvider.fromRequest("http://tsa.example.com", null, null, null);
 
     assertThatThrownBy(
-            () -> service.getTimestamp("hello".getBytes(StandardCharsets.UTF_8), "SHA256", provider, true, true))
+            () ->
+                service.getTimestamp(
+                    "hello".getBytes(StandardCharsets.UTF_8), "SHA256", provider, true, true))
         .isInstanceOf(TimestampException.class);
 
     verify(httpClient).postTimestampQuery(any(), any(), any());
@@ -77,7 +79,9 @@ class TimestampServiceTest {
         TimestampProvider.fromRequest("http://zd.kamusm.gov.tr", "12345", "secret", null);
 
     assertThatThrownBy(
-            () -> service.getTimestamp("hello".getBytes(StandardCharsets.UTF_8), "SHA256", provider, true, true))
+            () ->
+                service.getTimestamp(
+                    "hello".getBytes(StandardCharsets.UTF_8), "SHA256", provider, true, true))
         .isInstanceOf(TimestampException.class)
         .hasMessageContaining("403");
   }

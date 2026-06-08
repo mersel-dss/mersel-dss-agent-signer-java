@@ -289,8 +289,8 @@ public class TimestampService {
   }
 
   /**
-   * TSA yanıtını {@link TimeStampToken}'a ayrıştırır. Hem çıplak token (CMSSignedData / .tst) hem de
-   * tam {@code TimeStampResponse} formatını destekler. Yanıt bir red (rejection) ise statü
+   * TSA yanıtını {@link TimeStampToken}'a ayrıştırır. Hem çıplak token (CMSSignedData / .tst) hem
+   * de tam {@code TimeStampResponse} formatını destekler. Yanıt bir red (rejection) ise statü
    * string'iyle {@link TimestampException} fırlatır.
    */
   private TimeStampToken parseTimestampToken(byte[] bytes) {
@@ -339,7 +339,8 @@ public class TimestampService {
   }
 
   /** İmza algoritması bilgisini (isim + OID) token'ın imza bilgisinden doldurur. */
-  private void fillSignatureAlgorithm(TimeStampToken token, TimestampValidationResponseDto response) {
+  private void fillSignatureAlgorithm(
+      TimeStampToken token, TimestampValidationResponseDto response) {
     try {
       CMSSignedData signedData = token.toCMSSignedData();
       Collection<SignerInformation> signers = signedData.getSignerInfos().getSigners();

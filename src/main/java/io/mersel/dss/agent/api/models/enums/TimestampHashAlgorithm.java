@@ -35,8 +35,8 @@ import org.bouncycastle.tsp.TSPAlgorithms;
  * <p>Sunucu projesi (mersel-dss-server-signer) bu eşleştirmeyi Avrupa DSS kütüphanesinin {@code
  * DigestAlgorithm} enum'undan alır. Agent projesi DSS bağımlılığı taşımadığından (sadece
  * BouncyCastle + OkHttp), aynı eşleştirme burada elle tutulur: her algoritma için BouncyCastle
- * {@link TSPAlgorithms} OID sabiti (TSQ üretimi için), Java {@link java.security.MessageDigest}
- * adı (digest hesaplama için) ve OID string'i (TSR doğrulamasında ters arama için) saklanır.
+ * {@link TSPAlgorithms} OID sabiti (TSQ üretimi için), Java {@link java.security.MessageDigest} adı
+ * (digest hesaplama için) ve OID string'i (TSR doğrulamasında ters arama için) saklanır.
  */
 public enum TimestampHashAlgorithm {
   SHA1("SHA-1", "1.3.14.3.2.26", "SHA-1", TSPAlgorithms.SHA1),

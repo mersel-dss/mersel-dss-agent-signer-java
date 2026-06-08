@@ -44,9 +44,7 @@ public class TimestampStatusDto {
   @JsonProperty("available")
   private boolean available;
 
-  @Schema(
-      description = "Kimlik bilgilerinin nasıl sağlanacağını belirtir",
-      example = "PARAMETER")
+  @Schema(description = "Kimlik bilgilerinin nasıl sağlanacağını belirtir", example = "PARAMETER")
   @JsonProperty("credentialSource")
   private String credentialSource;
 

@@ -76,7 +76,8 @@ public final class TimestampProvider {
           "Zaman damgası sunucu adresi (tsaUrl) zorunludur. Masaüstü uygulamasında kayıtlı "
               + "sağlayıcı adresini parametre olarak gönderin.");
     }
-    boolean resolved = TubitakTspDetector.resolveTubitakTspMode(Boolean.TRUE.equals(tubitakFlag), url);
+    boolean resolved =
+        TubitakTspDetector.resolveTubitakTspMode(Boolean.TRUE.equals(tubitakFlag), url);
     return new TimestampProvider(url, userId, password, resolved);
   }
 

@@ -38,7 +38,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class TubitakCreditRequestDto {
 
   @NotBlank(message = "Zaman damgası sunucu adresi (tsaUrl) zorunludur")
-  @Schema(description = "TÜBİTAK ESYA / KamuSM zaman damgası adresi.", example = "http://zd.kamusm.gov.tr", required = true)
+  @Schema(
+      description = "TÜBİTAK ESYA / KamuSM zaman damgası adresi.",
+      example = "http://zd.kamusm.gov.tr",
+      required = true)
   private String tsaUrl;
 
   @NotBlank(message = "Müşteri numarası (tsUserId) zorunludur")
