@@ -126,7 +126,13 @@ public class WebConfig implements WebMvcConfigurer {
         .allowedOriginPatterns(allowedOriginPatterns.toArray(new String[0]))
         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
         .allowedHeaders("*")
-        .exposedHeaders("Content-Disposition")
+        .exposedHeaders(
+            "Content-Disposition",
+            "X-Timestamp-Time",
+            "X-Timestamp-TSA",
+            "X-Timestamp-Serial",
+            "X-Timestamp-Hash-Algorithm",
+            "X-Timestamp-Nonce")
         .allowCredentials(true)
         .maxAge(3600);
   }

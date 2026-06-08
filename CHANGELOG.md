@@ -6,6 +6,49 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Added
+
+- **Zaman damgası (RFC 3161) desteği — TÜBİTAK ESYA / KamuSM dahil, kimlik
+  bilgileri parametre tabanlı.** Sunucu kardeşi `mersel-dss-server-signer`'daki
+  zaman damgası özelliğinin agent'a taşınmış hâli. **Temel fark — kimlik kaynağı:**
+  sunucu TSA adresini ve kimlik bilgilerini `TS_SERVER_HOST` / `TS_USER_ID` /
+  `TS_USER_PASSWORD` **ortam değişkenlerinden** (ortam başına tek sabit TSA) okur;
+  agent ise masaüstü uygulamasında kayıtlı sağlayıcı bilgilerini **her API
+  isteğinde parametre olarak** alır (`tsaUrl`, `tsUserId`, `tsUserPassword`,
+  `tubitak`). Böylece tek agent kurulumu çağrı bazında farklı TSA'lara istek
+  gönterebilir ve hiçbir kimlik bilgisi agent'ta saklanmaz.
+  - **Yeni uçlar**: `POST /timestamp/get` (dosya + TSA parametreleri → binary
+    `.tst` token; metadata `X-Timestamp-Time` / `-TSA` / `-Serial` /
+    `-Hash-Algorithm` / `-Nonce` HTTP header'larında), `POST /timestamp/validate`
+    (token + opsiyonel orijinal belge ile doğrulama, TSA'ya bağlanmaz),
+    `GET /timestamp/status` (özelliğin parametre-tabanlı kullanım modelini bildirir),
+    `POST /tubitak/credit` (TÜBİTAK kalan kontör sorgusu, müşteri no / parola
+    parametre olarak).
+  - **TÜBİTAK ESYA kimlik doğrulama birebir taşındı**: PBKDF2 + AES-256-CBC ile
+    şifrelenen DER-encoded `identity` token, `User-Agent: UEKAE TSS Client`,
+    kontör için `SHA1(customerId + epochMillis)` + `credit_req` / `credit_req_time`
+    header'ları. KamuSM host'ları (`zd.kamusm.gov.tr`, `tzd.kamusm.gov.tr`)
+    otomatik tespit edilir; istemci `tubitak` bayrağını göndermeyi unutsa bile
+    doğru protokol seçilir.
+  - **Neden sunucudan birebir dosya kopyası yapılmadı:** sunucunun zaman damgası
+    kodu Avrupa DSS kütüphanesine (`eu.europa.esig.dss` + Apache HttpClient)
+    dayanıyor; agent bu bağımlılıkları taşımıyor. DSS'in kendisi de RFC 3161
+    TSQ/TSR üretimini zaten **BouncyCastle** ile yapıyor. Bu yüzden birkaç MB'lık
+    DSS + Apache HttpClient bağımlılık ağacını sırf zaten mevcut olan
+    BouncyCastle'ı dolaylı çağırmak için eklemek yerine, RFC 3161 akışı doğrudan
+    **BouncyCastle** (`org.bouncycastle.tsp.*`) ile, HTTP taşıması ise mevcut
+    **OkHttp** istemcisiyle gerçeklendi. Üretilen TSQ/TSR byte'ları, TÜBİTAK
+    kimlik şeması ve doğrulama çıktısı sunucuyla işlevsel olarak birebir aynıdır;
+    "ortak API kontratı" parite modeli korunur (agent zaten imzalamada da
+    iText/xades4j/ipkcs11wrapper ile sunucudan farklı stack kullanır).
+  - **Sunucu davranış paritesi:** `useNonce` varsayılanı sunucudaki DSS
+    `OnlineTSPSource` ile birebir aynı olacak şekilde **`false`** (nonce
+    gönderilmez); replay koruması istenirse istemci `useNonce=true` geçebilir.
+    Nonce kullanılıp da TSA yanıta yansıtmazsa fail edilmez, yalnızca uyarı
+    log'lanır (TSA interoperabilitesi).
+  - **CORS**: `X-Timestamp-*` metadata header'ları `exposedHeaders`'a eklendi ki
+    farklı origin'lerdeki tarayıcı istemcileri zaman damgası bilgilerini okuyabilsin.
+
 ## [1.1.6] — 2026-06-07
 
 ### Changed
