@@ -6,6 +6,43 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+### Fixed
+
+- **XAdES CounterSignature — AKİS EC kartında `CKR_ATTRIBUTE_SENSITIVE` ile
+  patlama düzeltildi (IAIK native fallback artık tetikleniyor).** Sahada AKİS
+  (`akisp11.dll`, EC anahtar) kartıyla aynı oturumda **3 XAdES-BES imzası başarılı
+  olup ardından `POST /xades/sign` counter-signature isteği `500 SIGNATURE_FAILED`
+  / `CKR_ATTRIBUTE_SENSITIVE` ile patlıyordu**. İki ayrı imza yolu arasındaki
+  asimetri sebep:
+  - **XAdES-BES yolu** (`signXmlDocument` → `doXadesBesSign`) raw-only EC
+    kartlarını resolver ile **proaktif** algılayıp SunPKCS11 JSR-105 ECDSA turunu
+    hiç denemeden doğrudan IAIK native (ham `C_Sign`) yoluna gidiyor; bu yüzden
+    BES imzaları aynı kartta sorunsuz geçiyordu.
+  - **Counter-signature yolu** (`signHrXmlCounterSignature` → `doCounterSignature`)
+    bu proaktif yönlendirmeyi yapmadan doğrudan SunPKCS11 + JSR-105 ile imzalıyor.
+    AKİS'in **sensitive (CKA_SENSITIVE=true, extractable değil) EC private key**'inde
+    SunPKCS11 imza sırasında hassas bir attribute okumaya kalkışınca token
+    `CKR_ATTRIBUTE_SENSITIVE` (`java.security.ProviderException` sarılı) fırlatıyor.
+  - **Kök bug:** Counter-signature'ın da var olan IAIK native fallback'i
+    (`doCounterSignatureNative`, BES'in kullandığı ham `C_Sign` ile aynı mantık)
+    devreye girmesi gerekirdi; ancak `requiresCounterSignatureNativeFallback`
+    tetikleyici listesi yalnız CKA_ID collision / `CKR_USER_NOT_LOGGED_IN` ve
+    `ALGORITHM_UNSUPPORTED` (`CKR_FUNCTION_NOT_SUPPORTED`, "Unsupported parameters",
+    `CKR_MECHANISM_INVALID`, ...) pattern'lerini tanıyordu. `CKR_ATTRIBUTE_SENSITIVE`
+    bu listede olmadığı için fallback hiç tetiklenmiyor, hata düz 500 olarak
+    kullanıcıya dönüyordu.
+  - **Çözüm:** `requiresCounterSignatureNativeFallback` artık cause zincirinde
+    (case-insensitive, tüm zinciri gezerek) `CKR_ATTRIBUTE_SENSITIVE` pattern'ini
+    de yakalıyor; bu hata SunPKCS11 atlanıp IAIK PKCS#11 wrapper (yazılım digest +
+    ham `C_Sign`, hiçbir hassas attribute okunmadan) native yoluna düşüyor. Native
+    yol BES'te aynı kart/EC anahtarla zaten çalıştığı için counter-signature de
+    tamamlanır. Destek logları için `describePathology` bu pattern'i
+    `CKR_ATTRIBUTE_SENSITIVE (SunPKCS11 JSR-105 ECDSA hassas attribute okuyor,
+    AKİS EC tipik)` olarak adlandırıyor.
+  - **Test:** `XadesServiceDispatchTest.counterSignatureFallsBackToNativeOnAttributeSensitive`
+    eklendi (sahadaki trace cause-chain'iyle birebir); tüm dispatch regresyon
+    testleri yeşil.
+
 ## [1.1.7] — 2026-06-08
 
 ### Added

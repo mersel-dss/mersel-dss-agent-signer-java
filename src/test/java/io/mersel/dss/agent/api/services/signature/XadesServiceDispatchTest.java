@@ -282,6 +282,49 @@ class XadesServiceDispatchTest {
   }
 
   @Test
+  void counterSignatureFallsBackToNativeOnAttributeSensitive() throws Exception {
+    Path libPath = Paths.get("/tmp/dummy-libakisp11.dylib");
+    XadesService svc = newSpyService(libPath);
+
+    // Sensitive EC anahtar: SunPKCS11 JSR-105 ECDSA yolu hassas attribute okumaya kalkışır →
+    // ProviderException sarılı CKR_ATTRIBUTE_SENSITIVE (AKİS akisp11 EC kart, sahada görülen
+    // trace).
+    SignatureOperationException sunFail =
+        new SignatureOperationException(
+            SignatureOperationException.CODE_FAILED,
+            "XAdES CounterSignature başarısız: sun.security.pkcs11.wrapper.PKCS11Exception:"
+                + " CKR_ATTRIBUTE_SENSITIVE | root: CKR_ATTRIBUTE_SENSITIVE",
+            new java.security.ProviderException(
+                "sun.security.pkcs11.wrapper.PKCS11Exception: CKR_ATTRIBUTE_SENSITIVE"));
+    Mockito.doThrow(sunFail)
+        .when(svc)
+        .signHrCounterSignatureViaSunPkcs11(
+            Mockito.eq(libPath),
+            Mockito.any(SignDocumentDto.class),
+            Mockito.any(SignatureDiagnostics.class));
+
+    byte[] nativeOutput = "<doc><Signature/></doc>".getBytes(StandardCharsets.UTF_8);
+    Mockito.doReturn(nativeOutput)
+        .when(svc)
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.eq(libPath),
+            Mockito.anyString(),
+            Mockito.anyString(),
+            Mockito.any(SignatureDiagnostics.class));
+
+    assertThat(svc.signHrXmlCounterSignature(dto())).isEqualTo(nativeOutput);
+
+    Mockito.verify(svc, Mockito.times(1))
+        .doCounterSignatureNative(
+            Mockito.any(byte[].class),
+            Mockito.eq(libPath),
+            Mockito.anyString(),
+            Mockito.anyString(),
+            Mockito.any(SignatureDiagnostics.class));
+  }
+
+  @Test
   void counterSignatureUnrelatedFailureDoesNotFallback() throws Exception {
     Path libPath = Paths.get("/tmp/dummy-libakisp11.dylib");
     XadesService svc = newSpyService(libPath);

@@ -460,11 +460,21 @@ public class XadesService {
    * #classifySignatureFailure} == {@code ALGORITHM_UNSUPPORTED} → CKR_FUNCTION_NOT_SUPPORTED,
    * "Unsupported parameters", CKR_MECHANISM_INVALID, ...). Native yol raw {@code CKM_RSA_PKCS} /
    * {@code CKM_ECDSA} + yazılım digest kullandığı için bu patolojilerin tamamını by-pass eder.
+   *
+   * <p>Ek tetikleyici — {@code CKR_ATTRIBUTE_SENSITIVE}: BES yolu raw-only EC kartları (AKİS tipik)
+   * resolver ile proaktif olarak native'e yönlendirir ve SunPKCS11 JSR-105 ECDSA yolunu hiç
+   * denemez; counter-signature yolu ({@link #doCounterSignature}) ise bu proaktif yönlendirmeyi
+   * yapmadan doğrudan SunPKCS11 + JSR-105 ile imzalar. AKİS'in sensitive (CKA_SENSITIVE=true,
+   * extractable değil) EC private key'inde SunPKCS11 imza için bir hassas attribute okumaya
+   * kalkıştığında token {@code CKR_ATTRIBUTE_SENSITIVE} ({@code ProviderException} sarılı)
+   * fırlatır. IAIK native yolu yalnız ham {@code C_Sign} çağırıp hiçbir hassas attribute okumadığı
+   * için bu patolojiyi de by-pass eder.
    */
   private static boolean requiresCounterSignatureNativeFallback(Throwable t) {
     return IaikPkcs11Signer.requiresIaikFallback(t)
         || SignatureOperationException.CODE_ALGORITHM_UNSUPPORTED.equals(
-            classifySignatureFailure(t));
+            classifySignatureFailure(t))
+        || CauseChainExtractor.findContaining(t, "ckr_attribute_sensitive") != null;
   }
 
   /**
@@ -1143,6 +1153,7 @@ public class XadesService {
                 String lower = msg.toLowerCase(Locale.ROOT);
                 return lower.contains("ckr_user_not_logged_in")
                     || lower.contains("ckr_function_not_supported")
+                    || lower.contains("ckr_attribute_sensitive")
                     || lower.contains("update() failed")
                     || (lower.contains("invalid keystore state") && lower.contains("cka_id"))
                     || (lower.contains("private keys sharing") && lower.contains("cka_id"));
@@ -1157,6 +1168,9 @@ public class XadesService {
     }
     if (lower.contains("ckr_function_not_supported") || lower.contains("update() failed")) {
       return "CKR_FUNCTION_NOT_SUPPORTED (raw-only firmware, multi-part C_SignUpdate desteklenmiyor)";
+    }
+    if (lower.contains("ckr_attribute_sensitive")) {
+      return "CKR_ATTRIBUTE_SENSITIVE (SunPKCS11 JSR-105 ECDSA hassas attribute okuyor, AKİS EC tipik)";
     }
     if (lower.contains("invalid keystore state") && lower.contains("cka_id")) {
       return "CKA_ID collision (NES Bulut dual-key SIGN0+SIGN1)";
