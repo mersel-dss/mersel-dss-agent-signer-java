@@ -6,6 +6,8 @@ standardına dayanır; sürüm numaralandırması
 
 ## [Unreleased]
 
+## [1.1.8] — 2026-06-10
+
 ### Fixed
 
 - **XAdES CounterSignature — AKİS EC kartında `CKR_ATTRIBUTE_SENSITIVE` ile
@@ -1772,7 +1774,8 @@ kod varsa, `listCertificates(...)` overload'ından `pin` argümanını çıkar.
   `lisans.xml` — TÜBİTAK ESYA legacy artefact'ları, kodda referansı yok.
 - `HttpConfiguration` — HTTP-only mimaride çift connector gereksiz.
 
-[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.7...HEAD
+[Unreleased]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.8...HEAD
+[1.1.8]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/mersel-dss/mersel-dss-agent-signer-java/compare/v1.1.4-rc.1...v1.1.5
